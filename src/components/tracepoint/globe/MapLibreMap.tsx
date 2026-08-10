@@ -132,23 +132,23 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
     <>
       <style>{`
         .tp-maplibre-popup .maplibregl-popup-content {
-          background: #181b19;
-          border: 1px solid #2a2e2a;
-          border-radius: 4px;
+          background: #151917;
+          border: 1px solid #232823;
+          border-radius: 3px;
           padding: 8px 10px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+          box-shadow: 0 4px 24px rgba(0,0,0,0.5);
         }
         .tp-maplibre-popup .maplibregl-popup-tip {
-          border-top-color: #181b19;
+          border-top-color: #151917;
         }
         .tp-maplibre-popup .maplibregl-popup-close-button {
           display: none;
         }
-        .maplibregl-ctrl-attrib { font-size: 9px !important; background: rgba(15,17,16,0.8) !important; color: #707870 !important; }
-        .maplibregl-ctrl-attrib a { color: #707870 !important; }
-        .maplibregl-ctrl-group { background: #181b19 !important; border: 1px solid #2a2e2a !important; border-radius: 4px !important; }
-        .maplibregl-ctrl-group button { border-color: #2a2e2a !important; }
-        .maplibregl-ctrl-group button span { background: #d4d4cc !important; }
+        .maplibregl-ctrl-attrib { font-size: 8px !important; background: rgba(12,14,13,0.85) !important; color: #5e665c !important; }
+        .maplibregl-ctrl-attrib a { color: #5e665c !important; }
+        .maplibregl-ctrl-group { background: #151917 !important; border: 1px solid #232823 !important; border-radius: 3px !important; }
+        .maplibregl-ctrl-group button { border-color: #232823 !important; }
+        .maplibregl-ctrl-group button span { background: #cdd1c8 !important; }
       `}</style>
       <div ref={mapContainer} className={`w-full h-full ${className}`} />
     </>

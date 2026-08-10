@@ -6,7 +6,7 @@ import { useNavStore, useAuthStore } from '@/lib/store/app';
 import type { AppView } from '@/lib/types';
 import {
   Radar, Search, Clock, Smartphone, Shield, Settings, FileText, LayoutDashboard,
-  ChevronLeft, ChevronRight, LogOut, Crosshair, Users, Database, AlertTriangle, Activity,
+  ChevronLeft, ChevronRight, LogOut, Crosshair, Database, Activity,
 } from 'lucide-react';
 
 interface NavItem {
@@ -26,11 +26,11 @@ const userNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { view: 'admin', label: 'Admin Panel', icon: Shield, adminOnly: true },
+  { view: 'admin', label: 'Admin', icon: Shield, adminOnly: true },
 ];
 
 export function Sidebar() {
-  const { currentView, sidebarOpen, navigate, toggleSidebar } = useNavStore();
+   const { currentView, sidebarOpen, navigate, toggleSidebar } = useNavStore();
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
 
@@ -50,21 +50,24 @@ export function Sidebar() {
     <aside
       className={cn(
         'h-screen flex flex-col border-r border-border bg-sidebar transition-all duration-200 shrink-0',
-        sidebarOpen ? 'w-52' : 'w-12'
+        sidebarOpen ? 'w-48' : 'w-11'
       )}
     >
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-3 h-12 border-b border-border shrink-0">
-        <div className="flex items-center justify-center w-7 h-7 rounded bg-[#c8a24e]/10 shrink-0">
-          <Radar className="w-3.5 h-3.5 text-[#c8a24e]" />
+      <div className="flex items-center gap-2 px-2.5 h-10 border-b border-border shrink-0">
+        <div className="flex items-center justify-center w-6 h-6 rounded bg-[#c8a24e]/10 border border-[#c8a24e]/15 shrink-0">
+          <Radar className="w-3 h-3 text-[#c8a24e]" />
         </div>
         {sidebarOpen && (
-          <span className="text-[13px] font-semibold text-foreground tracking-wide">Tracepoint</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-[11px] font-semibold text-foreground tracking-wider leading-tight">TRACEPOINT</span>
+            <span className="text-[8px] text-muted-foreground tracking-widest leading-tight">INTELLIGENCE</span>
+          </div>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-2 px-1.5 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 py-1.5 px-1 space-y-px overflow-y-auto">
         {items.map((item) => {
           const isActive = currentView === item.view;
           const Icon = item.icon;
@@ -73,39 +76,39 @@ export function Sidebar() {
               key={item.view}
               onClick={() => handleNavClick(item.view)}
               className={cn(
-                'w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-[13px] transition-colors',
+                'w-full flex items-center gap-2 px-2 py-1.5 rounded text-[11px] transition-all duration-150',
                 isActive
-                  ? 'bg-[#c8a24e]/8 text-[#c8a24e]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  ? 'bg-[#c8a24e]/8 text-[#c8a24e] border-l border-l-[#c8a24e]'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60 border-l border-l-transparent'
               )}
               title={!sidebarOpen ? item.label : undefined}
             >
-              <Icon className="w-4 h-4 shrink-0" />
-              {sidebarOpen && <span>{item.label}</span>}
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              {sidebarOpen && <span className="font-medium">{item.label}</span>}
             </button>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-border p-1.5 space-y-0.5">
+      <div className="border-t border-border p-1 space-y-px">
         {sidebarOpen && user.displayName && (
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-accent mb-1">
-            <div className="w-5 h-5 rounded-full bg-[#252925] flex items-center justify-center text-[10px] mono-value">
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-accent/40 mb-0.5">
+            <div className="w-5 h-5 rounded bg-[#1f2420] border border-border flex items-center justify-center text-[9px] mono-value">
               {user.displayName[0].toUpperCase()}
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] text-foreground truncate leading-tight">{user.displayName}</div>
-              <div className="mono-label text-[9px] leading-tight">{user.role}</div>
+              <div className="text-[10px] text-foreground truncate leading-tight font-medium">{user.displayName}</div>
+              <div className="mono-label" style={{ fontSize: '0.5rem' }}>{user.role}</div>
             </div>
           </div>
         )}
         <button
           onClick={toggleSidebar}
-          className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent text-[11px] transition-colors"
+          className="w-full flex items-center justify-center gap-1 px-2 py-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/60 text-[10px] transition-colors"
         >
-          {sidebarOpen ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          {sidebarOpen && <span>Collapse</span>}
+          {sidebarOpen ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {sidebarOpen && <span className="mono-label" style={{ fontSize: '0.5rem' }}>COLLAPSE</span>}
         </button>
       </div>
     </aside>

@@ -91,7 +91,7 @@ export default function AuthView() {
     try {
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/` },
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
       });
       if (authError) throw authError;
     } catch (err: any) {

@@ -46,37 +46,37 @@
 :root {
   --radius: 0.375rem;
 
-  /* Mature dark palette — low contrast, high information density */
-  --background: #0f1110;
-  --foreground: #d4d4cc;
-  --card: #181b19;
-  --card-foreground: #d4d4cc;
-  --popover: #181b19;
-  --popover-foreground: #d4d4cc;
+  /* Tracepoint Intelligence Palette — Palantir-caliber data density */
+  --background: #0c0e0d;
+  --foreground: #cdd1c8;
+  --card: #151917;
+  --card-foreground: #cdd1c8;
+  --popover: #151917;
+  --popover-foreground: #cdd1c8;
   --primary: #c8a24e;
-  --primary-foreground: #0f1110;
-  --secondary: #1e2120;
-  --secondary-foreground: #d4d4cc;
-  --muted: #1e2120;
-  --muted-foreground: #707870;
-  --accent: #252925;
-  --accent-foreground: #d4d4cc;
-  --destructive: #c44040;
-  --border: #2a2e2a;
-  --input: #2a2e2a;
+  --primary-foreground: #0c0e0d;
+  --secondary: #1a1e1b;
+  --secondary-foreground: #cdd1c8;
+  --muted: #1a1e1b;
+  --muted-foreground: #5e665c;
+  --accent: #1f2420;
+  --accent-foreground: #cdd1c8;
+  --destructive: #b83a3a;
+  --border: #232823;
+  --input: #232823;
   --ring: #c8a24e;
   --chart-1: #c8a24e;
   --chart-2: #4a9e5a;
   --chart-3: #c44040;
   --chart-4: #707870;
   --chart-5: #3a4438;
-  --sidebar: #141714;
-  --sidebar-foreground: #b0b8b0;
+  --sidebar: #101310;
+  --sidebar-foreground: #9aa59a;
   --sidebar-primary: #c8a24e;
-  --sidebar-primary-foreground: #0f1110;
-  --sidebar-accent: #1e2120;
-  --sidebar-accent-foreground: #d4d4cc;
-  --sidebar-border: #2a2e2a;
+  --sidebar-primary-foreground: #0c0e0d;
+  --sidebar-accent: #1a1e1b;
+  --sidebar-accent-foreground: #cdd1c8;
+  --sidebar-border: #1f2420;
   --sidebar-ring: #c8a24e;
 }
 
@@ -90,23 +90,26 @@
   }
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* Scrollbar — minimal, integrated */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2a2e2a; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #23282380; border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3e3a; }
 
 /* Mono label utility */
 .mono-label {
   font-family: var(--font-geist-mono), monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  color: #707870;
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5e665c;
+  font-weight: 500;
 }
 
 .mono-value {
   font-family: var(--font-geist-mono), monospace;
   color: #c8a24e;
+  font-weight: 500;
 }
 
 /* Pulse for live indicators */
@@ -118,57 +121,65 @@
 
 /* Source type badge */
 .source-badge {
-  font-size: 0.6rem;
+  font-size: 0.5625rem;
   padding: 1px 5px;
-  border-radius: 3px;
-  background: #1e2120;
-  color: #707870;
+  border-radius: 2px;
+  background: #1a1e1b;
+  color: #5e665c;
   font-family: var(--font-geist-mono), monospace;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 500;
+  border: 1px solid #23282360;
 }
 
 /* Demo watermark */
+.demo-mark {
+  position: relative;
+}
 .demo-mark::after {
   content: 'DEMO DATA \2014 NOT REAL';
   position: absolute;
   top: 6px;
   right: 6px;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 0.5625rem;
-  letter-spacing: 0.08em;
-  color: rgba(200, 162, 78, 0.5);
-  background: rgba(15, 17, 16, 0.85);
-  padding: 2px 7px;
-  border: 1px solid rgba(200, 162, 78, 0.2);
-  border-radius: 3px;
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  color: rgba(200, 162, 78, 0.45);
+  background: rgba(12, 14, 13, 0.9);
+  padding: 2px 6px;
+  border: 1px solid rgba(200, 162, 78, 0.15);
+  border-radius: 2px;
   pointer-events: none;
   z-index: 10;
 }
 
 /* Progress bar */
 .progress-track {
-  background: #1e2120;
+  background: #1a1e1b;
   height: 2px;
   border-radius: 1px;
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
-  background: #c8a24e;
+  background: linear-gradient(90deg, #c8a24e, #d4b565);
   border-radius: 1px;
   transition: width 0.4s ease;
+  box-shadow: 0 0 6px #c8a24e40;
 }
 
-/* Surface panel */
+/* Surface panel — elevated card with subtle depth */
 .surface {
-  background: #181b19;
-  border: 1px solid #2a2e2a;
+  background: #151917;
+  border: 1px solid #232823;
   border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.02);
 }
 
 /* Globe container */
 .globe-bg {
-  background: radial-gradient(ellipse at center, #161a18 0%, #0f1110 70%);
+  background: radial-gradient(ellipse at 40% 45%, #141a16 0%, #0c0e0d 70%);
 }
 
 /* Admin panel — separate visual language */
@@ -183,8 +194,70 @@
 
 /* Leaflet map marker override */
 .tp-map-marker { background: none !important; border: none !important; }
-.leaflet-container { background: #0f1110 !important; font-family: var(--font-geist-mono), monospace; }
-.leaflet-control-zoom a { background: #181b19 !important; color: #d4d4cc !important; border-color: #2a2e2a !important; }
-.leaflet-control-zoom a:hover { background: #252925 !important; }
-.leaflet-popup-content-wrapper { background: #181b19; color: #d4d4cc; border: 1px solid #2a2e2a; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-.leaflet-popup-tip { background: #181b19; border: 1px solid #2a2e2a; }
+.leaflet-container { background: #0c0e0d !important; font-family: var(--font-geist-mono), monospace; }
+.leaflet-control-zoom a { background: #151917 !important; color: #cdd1c8 !important; border-color: #232823 !important; }
+.leaflet-control-zoom a:hover { background: #1f2420 !important; }
+.leaflet-popup-content-wrapper { background: #151917; color: #cdd1c8; border: 1px solid #232823; border-radius: 3px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
+.leaflet-popup-tip { background: #151917; border: 1px solid #232823; }
+
+/* Scanline overlay — very subtle intelligence terminal feel */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Confidence bar segments */
+.confidence-bar {
+  display: flex;
+  gap: 1px;
+  height: 3px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: #1a1e1b;
+}
+.confidence-bar .segment {
+  height: 100%;
+  border-radius: 1px;
+}
+
+/* Data grid pattern for empty states */
+.data-grid-bg {
+  background-image:
+    linear-gradient(rgba(35,40,35,0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(35,40,35,0.3) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Subtle top-edge highlight on surfaces */
+.surface-highlight::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,162,78,0.08), transparent);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* Intelligence badge — primary action indicator */
+.intel-badge {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+/* Status indicator with glow */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.healthy { background: #4a9e5a; box-shadow: 0 0 6px rgba(74,158,90,0.4); }
+.status-dot.degraded { background: #c8a24e; box-shadow: 0 0 6px rgba(200,162,78,0.4); }
+.status-dot.down { background: #b83a3a; box-shadow: 0 0 6px rgba(184,58,58,0.4); }
