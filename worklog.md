@@ -2,54 +2,24 @@
 
 ---
 Task ID: 1
-Agent: Main
-Task: Full platform overhaul — Supabase, real APIs, admin separation, design maturity
+Agent: Super Z (main)
+Task: Assess project, install deps, wire credentials, replace map, push to GitHub
 
 Work Log:
-- Created `.env.local` with Supabase URL/anon key, NumVerify, OpenAI, and Serper API keys
-- Installed `leaflet` and `react-leaflet` (free Mapbox alternative) + `@types/leaflet`
-- Updated Supabase schema (`supabase-schema.sql`) to add `email` column to profiles table
-- Updated investigation store to use real API pipeline when keys are available
-- Created `/src/lib/api/pipeline.ts` — Real investigation pipeline with 4 stages: phone validation (NumVerify), web search (Serper), identity correlation, AI analysis (OpenAI via proxy)
-- Created `/src/lib/api/numverify.ts` — NumVerify phone validation integration
-- Created `/src/lib/api/serper.ts` — Serper.dev web search integration
-- Created `/src/lib/api/openai.ts` — Client-side OpenAI integration via /api/ai proxy
-- Created `/src/app/api/ai/route.ts` — Server-side OpenAI proxy (avoids browser-request block)
-- Created `/src/app/auth/callback/route.ts` — OAuth redirect handler
-- Updated `AuthView.tsx` — Added session restoration on mount, Google OAuth listener, simplified auth flow
-- Created `/src/app/admin/layout.tsx` — Separate admin layout with light theme, auth guard for admin role
-- Created `/src/app/admin/page.tsx` — 7-section admin panel (Overview, Providers, Security, Audit, Features, Devices, Settings)
-- Created `/src/components/tracepoint/admin/AdminSidebar.tsx` — Light-themed admin sidebar
-- Created `/src/components/tracepoint/admin/AdminHeader.tsx` — Light-themed admin header
-- Created `/src/lib/store/admin-nav.ts` — Admin navigation store
-- Updated `Sidebar.tsx` — Admin nav item routes to `/admin` instead of switching view
-- Updated `page.tsx` — Removed admin from SPA routing, admin is fully separated at `/admin`
-- Updated `Dashboard.tsx` — Added Leaflet 2D map view, error boundary for globe, list/evidence views
-- Created `/src/components/tracepoint/globe/LeafletMap.tsx` — Free dark-themed Leaflet map with custom markers
-- Updated `SettingsView.tsx` — Removed Mapbox token, shows API key status with green/red indicators
-- Updated `globals.css` — Added Leaflet dark theme overrides
-- Updated `store/app.ts` — Added `runDemoPipeline` fallback, wired real pipeline, set API keys from env, disabled demo mode by default
+- Read all key files (package.json, stores, API layer, components, admin pages, CSS)
+- Confirmed Supabase client, data layer, pipeline, and all API integrations already built
+- Installed maplibre-gl@6.2.0 (free Mapbox alternative)
+- Created .env.local with Supabase, OpenAI, Serper, NumVerify credentials
+- Verified Supabase anon key returns 401 (key may need re-check from dashboard)
+- Created /api/setup route to check DB table status at runtime
+- Built MapLibreMap.tsx — dark-themed map with OpenStreetMap tiles, custom markers, popups
+- Updated Dashboard.tsx to use MapLibre instead of Leaflet, added DB setup detection UI
+- Updated supabase-schema.sql with idempotent IF NOT EXISTS and DO $$ exception handlers
+- Verified Next.js build passes (8 routes compiled)
+- Pushed to https://github.com/deyoungsltd-cc/Tracepoint.git (main branch)
 
 Stage Summary:
-- All 10 tasks completed: Supabase configured, Google OAuth added, sidebar fixed (was already flex-based), investigation simplified (already done), admin separated to `/admin`, real APIs integrated (NumVerify, Serper, OpenAI, Leaflet), DB persistence wired, globe has error boundary with Leaflet fallback, design matured
-- Build passes cleanly — 0 errors
-- Routes: `/` (app), `/admin` (admin panel), `/api/ai` (OpenAI proxy), `/auth/callback` (OAuth)
-
----
-Task ID: 1-a
-Agent: API Integration Subagent
-Task: Create real API integration services
-
-Stage Summary:
-- Created numverify.ts, serper.ts, openai.ts, api/ai/route.ts
-- All functions are error-safe (never throw, return null/[])
-
----
-Task ID: 1-b
-Agent: Admin Panel Subagent
-Task: Create separate /admin route with own layout
-
-Stage Summary:
-- Created admin/layout.tsx, admin/page.tsx, AdminSidebar.tsx, AdminHeader.tsx, admin-nav.ts
-- Light theme admin with 7 sections, auth guard, completely separate from user UI
-- Modified page.tsx and Sidebar.tsx to route admin to /admin
+- MapLibre GL JS replaces Leaflet/Mapbox — free, no API token needed
+- DB setup flow: app detects missing tables and links directly to Supabase SQL Editor
+- Build verified clean, code pushed to GitHub
+- **Action needed from user**: Verify Supabase anon key in Dashboard > Settings > API, run schema in SQL Editor, enable Google Auth provider
