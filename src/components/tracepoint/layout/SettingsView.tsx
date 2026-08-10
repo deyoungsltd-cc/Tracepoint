@@ -4,9 +4,7 @@ import { useSettingsStore, useAuthStore, useNavStore } from '@/lib/store/app';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Save, Key, Globe, Bot, Trash2, AlertTriangle, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
+import { Save, CheckCircle, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
 export default function SettingsView() {
@@ -30,7 +28,7 @@ export default function SettingsView() {
 
         {/* Connection Status */}
         <div className="surface p-4 space-y-2.5">
-          <h3 className="text-xs font-medium text-foreground">Connection Status</h3>
+          <h3 className="text-xs font-medium text-foreground">System Status</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
@@ -42,9 +40,30 @@ export default function SettingsView() {
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 {supabaseReady ? <CheckCircle className="w-3.5 h-3.5 text-[#4a9e5a]" /> : <XCircle className="w-3.5 h-3.5 text-[#c8a24e]" />}
-                <span className="text-foreground">Google Auth</span>
+                <span className="text-foreground">Google OAuth</span>
               </div>
               <span className="text-muted-foreground">{supabaseReady ? 'Available' : 'Requires Supabase'}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-[#4a9e5a]" />
+                <span className="text-foreground">AI Assessment (OpenAI GPT-4o)</span>
+              </div>
+              <span className="text-muted-foreground">Server-side proxy</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-[#4a9e5a]" />
+                <span className="text-foreground">Web Search (Serper.dev)</span>
+              </div>
+              <span className="text-muted-foreground">Server-side proxy</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-3.5 h-3.5 text-[#4a9e5a]" />
+                <span className="text-foreground">Phone Validation (NumVerify)</span>
+              </div>
+              <span className="text-muted-foreground">Server-side proxy</span>
             </div>
           </div>
           {!supabaseReady && (
@@ -54,65 +73,38 @@ export default function SettingsView() {
           )}
         </div>
 
-        {/* API Keys */}
-        <div className="surface p-4 space-y-3.5">
-          <h3 className="text-xs font-medium text-foreground">API Keys</h3>
-          <p className="text-[11px] text-muted-foreground">Keys are pre-configured. Override here if needed.</p>
-
-          <div className="space-y-3">
-            {/* OpenAI */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-foreground">OpenAI (AI Assessments)</label>
-                {settings.aiApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : <XCircle className="w-3 h-3 text-[#c44040]" />}
+        {/* Provider Info */}
+        <div className="surface p-4 space-y-3">
+          <h3 className="text-xs font-medium text-foreground">Intelligence Providers</h3>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">All API keys are configured server-side and never exposed to the browser. Each provider is proxied through secure API routes.</p>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center justify-between py-1.5 border-b border-border">
+              <div>
+                <span className="text-foreground">OpenAI GPT-4o</span>
+                <span className="text-muted-foreground ml-2 mono-label">AI Analysis</span>
               </div>
-              <Input
-                type="password"
-                value={settings.aiApiKey}
-                onChange={(e) => updateSettings({ aiApiKey: e.target.value })}
-                placeholder="sk-proj-..."
-                className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">Powers AI identity analysis via GPT-4o. <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">Get key</a></p>
+              <span className="mono-label">/api/ai</span>
             </div>
-
-            {/* Serper.dev */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-foreground">Serper.dev (Web Search)</label>
-                {settings.serperApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : <XCircle className="w-3 h-3 text-[#c44040]" />}
+            <div className="flex items-center justify-between py-1.5 border-b border-border">
+              <div>
+                <span className="text-foreground">Serper.dev</span>
+                <span className="text-muted-foreground ml-2 mono-label">Web Search / OSINT</span>
               </div>
-              <Input
-                type="password"
-                value={settings.serperApiKey || ''}
-                onChange={(e) => updateSettings({ serperApiKey: e.target.value })}
-                placeholder="API key"
-                className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">OSINT web search. Free: 2,500/mo. <a href="https://serper.dev" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">Get key</a></p>
+              <span className="mono-label">/api/serper</span>
             </div>
-
-            {/* NumVerify */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-foreground">NumVerify (Phone Validation)</label>
-                {settings.numverifyApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : <XCircle className="w-3 h-3 text-[#c44040]" />}
+            <div className="flex items-center justify-between py-1.5">
+              <div>
+                <span className="text-foreground">NumVerify</span>
+                <span className="text-muted-foreground ml-2 mono-label">Phone Validation</span>
               </div>
-              <Input
-                type="password"
-                value={settings.numverifyApiKey || ''}
-                onChange={(e) => updateSettings({ numverifyApiKey: e.target.value })}
-                placeholder="API key"
-                className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">Phone validation + carrier lookup. Free: 100/mo. <a href="https://numverify.com" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">Get key</a></p>
+              <span className="mono-label">/api/numverify</span>
             </div>
           </div>
         </div>
 
-        {/* Investigation */}
+        {/* Investigation Preferences */}
         <div className="surface p-4 space-y-3">
-          <h3 className="text-xs font-medium text-foreground">Investigation</h3>
+          <h3 className="text-xs font-medium text-foreground">Investigation Preferences</h3>
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs text-foreground">Batch max size</div>
@@ -136,6 +128,23 @@ export default function SettingsView() {
               className="w-16 bg-accent border-border text-foreground h-7 text-xs text-right"
               min={1} max={20}
             />
+          </div>
+        </div>
+
+        {/* Account */}
+        <div className="surface p-4 space-y-3">
+          <h3 className="text-xs font-medium text-foreground">Account</h3>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Email</span>
+            <span className="text-foreground font-mono">{user?.email || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Role</span>
+            <span className="mono-label">{user?.role || 'standard'}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Session</span>
+            <span className="text-foreground">{user?.isDemo ? 'Demo Mode' : 'Authenticated'}</span>
           </div>
         </div>
 
