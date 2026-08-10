@@ -279,6 +279,8 @@ export interface AppSettings {
   aiProvider: 'openai' | 'anthropic' | 'local' | 'custom';
   aiApiKey: string;
   aiModel: string;
+  serperApiKey: string;
+  numverifyApiKey: string;
   mapboxToken: string;
   demoMode: boolean;
  batchMaxSize: number;

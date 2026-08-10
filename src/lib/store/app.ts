@@ -348,9 +348,11 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
   settings: {
-    aiProvider: 'openai',
+    aiProvider: 'openai' as const,
     aiApiKey: '',
     aiModel: 'gpt-4o',
+    serperApiKey: '',
+    numverifyApiKey: '',
     mapboxToken: '',
     demoMode: true,
     batchMaxSize: 10,
