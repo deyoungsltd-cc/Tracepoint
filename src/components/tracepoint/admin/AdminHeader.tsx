@@ -11,26 +11,13 @@ export function AdminHeader({ title }: AdminHeaderProps) {
   const { user, logout } = useAuthStore();
 
   return (
-    <header
-      className="h-12 border-b flex items-center px-5 gap-4 shrink-0"
-      style={{
-        background: '#f8f8f6',
-        borderColor: '#d4d4d0',
-      }}
-    >
-      <h1 className="text-[14px] font-semibold tracking-wide" style={{ color: '#1a1a1a' }}>
+    <header className="h-12 border-b border-border flex items-center px-5 gap-4 shrink-0 bg-background">
+      <h1 className="text-[14px] font-semibold tracking-wide text-foreground">
         {title}
       </h1>
 
       {user?.isDemo && (
-        <span
-          className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-          style={{
-            background: 'rgba(180, 83, 9, 0.08)',
-            color: '#b45309',
-            border: '1px solid rgba(180, 83, 9, 0.15)',
-          }}
-        >
+        <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-accent text-[#c8a24e] border border-border">
           Demo
         </span>
       )}
@@ -38,54 +25,36 @@ export function AdminHeader({ title }: AdminHeaderProps) {
       <div className="flex-1" />
 
       {/* Search */}
-      <div
-        className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md border"
-        style={{
-          background: '#f3f3f0',
-          borderColor: '#d4d4d0',
-          color: '#6b6b6b',
-        }}
-      >
+      <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-sidebar text-muted-foreground">
         <Search className="w-3.5 h-3.5" />
         <span className="text-[12px]">Search…</span>
       </div>
 
       {/* Notifications */}
       <button
-        className="p-1.5 rounded-md transition-colors hover:bg-white/80 relative"
-        style={{ color: '#525252' }}
+        className="p-1.5 rounded-md transition-colors hover:text-foreground hover:bg-accent text-muted-foreground relative"
       >
         <Bell className="w-4 h-4" />
-        <span
-          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
-          style={{ background: '#b45309' }}
-        />
+        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#c8a24e]" />
       </button>
 
       {/* User info + logout */}
       {user && (
-        <div className="flex items-center gap-3 pl-3 border-l" style={{ borderColor: '#d4d4d0' }}>
+        <div className="flex items-center gap-3 pl-3 border-l border-border">
           <div className="hidden sm:flex flex-col items-end">
-            <span className="text-[12px] font-medium leading-tight" style={{ color: '#1a1a1a' }}>
+            <span className="text-[12px] font-medium leading-tight text-foreground">
               {user.displayName}
             </span>
-            <span
-              className="text-[10px] uppercase tracking-wider font-medium leading-tight"
-              style={{ color: '#b45309' }}
-            >
+            <span className="text-[10px] uppercase tracking-wider font-medium leading-tight text-[#c8a24e]">
               {user.role}
             </span>
           </div>
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
-            style={{ background: 'rgba(180, 83, 9, 0.08)', color: '#b45309' }}
-          >
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 bg-accent text-[#c8a24e]">
             {user.displayName?.[0]?.toUpperCase() || 'A'}
           </div>
           <button
             onClick={logout}
-            className="p-1.5 rounded-md transition-colors hover:bg-white/80"
-            style={{ color: '#6b6b6b' }}
+            className="p-1.5 rounded-md transition-colors hover:text-foreground hover:bg-accent text-muted-foreground"
             title="Sign out"
           >
             <LogOut className="w-3.5 h-3.5" />

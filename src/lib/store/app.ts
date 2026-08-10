@@ -193,20 +193,19 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
   startInvestigation: async (query: Record<string, string>) => {
     set({ isRunning: true, progress: { stage: 'initializing', progress: 0, message: 'Initializing investigation...', timestamp: new Date().toISOString() } });
     try {
-      const numverifyKey = process.env.NEXT_PUBLIC_NUMVERIFY_KEY || useSettingsStore.getState().settings.numverifyApiKey || '';
-      const serperKey = process.env.NEXT_PUBLIC_SERPER_KEY || useSettingsStore.getState().settings.serperApiKey || '';
-      const openAiKey = process.env.NEXT_PUBLIC_OPENAI_KEY || useSettingsStore.getState().settings.aiApiKey || '';
-      const hasRealKeys = !!(numverifyKey || serperKey);
-      if (hasRealKeys) {
-        const { investigation, aiAssessment } = await runRealInvestigation(
-          { phone: query.phone || undefined, phoneNormalized: query.phoneNormalized || undefined, email: query.email || undefined, country: query.country || undefined, depth: (query.depth as 'quick' | 'standard' | 'deep') || 'standard', numverifyKey, serperKey, openAiKey },
-          { onProgress: (stage, message, progress) => { set({ progress: { stage, progress, message, timestamp: new Date().toISOString() } }); } },
-        );
-        if (isSupabaseConfigured() && !investigation.isDemoData) { saveInvestigation(investigation).catch(() => {}); }
-        set((state) => ({ investigations: [investigation, ...state.investigations], currentInvestigation: investigation, isRunning: false, progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: new Date().toISOString() }, aiAssessment }));
-      } else {
-        await runDemoPipeline(query, set);
-      }
+      // Always use the real pipeline — API calls go through server-side proxies
+      const { investigation, aiAssessment } = await runRealInvestigation(
+        {
+          phone: query.phone || undefined,
+          phoneNormalized: query.phoneNormalized || undefined,
+          email: query.email || undefined,
+          country: query.country || undefined,
+          depth: (query.depth as 'quick' | 'standard' | 'deep') || 'standard',
+        },
+        { onProgress: (stage, message, progress) => { set({ progress: { stage, progress, message, timestamp: new Date().toISOString() } }); } },
+      );
+      if (isSupabaseConfigured() && !investigation.isDemoData) { saveInvestigation(investigation).catch(() => {}); }
+      set((state) => ({ investigations: [investigation, ...state.investigations], currentInvestigation: investigation, isRunning: false, progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: new Date().toISOString() }, aiAssessment }));
     } catch (err) {
       console.error('Investigation error:', err);
       set({ isRunning: false, progress: { stage: 'failed', progress: 0, message: 'Investigation failed. Try again.', timestamp: new Date().toISOString() } });

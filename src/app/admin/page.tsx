@@ -47,7 +47,7 @@ function formatDateTime(iso: string): string {
 }
 
 function formatTime(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '\u2014';
   return new Date(iso).toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -74,17 +74,11 @@ function healthGlow(health: string): string {
   }
 }
 
-// --- Reusable light-themed card ---
+// --- Reusable card ---
 
 function AdminCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div
-      className={cn('rounded-lg border p-4', className)}
-      style={{
-        background: '#f8f8f6',
-        borderColor: '#d4d4d0',
-      }}
-    >
+    <div className={cn('surface p-4', className)}>
       {children}
     </div>
   );
@@ -93,20 +87,19 @@ function AdminCard({ children, className }: { children: React.ReactNode; classNa
 function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
   return (
     <AdminCard>
-      <div className="text-[11px] font-medium uppercase tracking-wider" style={{ color: '#6b6b6b' }}>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
       <div
         className={cn(
-          'text-2xl font-semibold mt-1',
+          'text-2xl font-semibold mt-1 text-foreground',
           accent ? 'font-mono' : ''
         )}
-        style={{ color: '#1a1a1a' }}
       >
         {value}
       </div>
       {sub && (
-        <div className="text-[11px] mt-1" style={{ color: '#6b6b6b' }}>
+        <div className="text-[11px] mt-1 text-muted-foreground">
           {sub}
         </div>
       )}
@@ -123,26 +116,21 @@ function EmptyState({ icon: Icon, title, description, action }: {
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div className="admin-surface rounded-lg p-10 flex flex-col items-center justify-center text-center gap-3">
+    <div className="surface rounded-lg p-10 flex flex-col items-center justify-center text-center gap-3">
       <div
-        className="w-12 h-12 rounded-full flex items-center justify-center"
-        style={{ background: 'rgba(180, 83, 9, 0.06)', border: '1px solid rgba(180, 83, 9, 0.12)' }}
+        className="w-12 h-12 rounded-full flex items-center justify-center bg-[#c8a24e]/8 border border-[#c8a24e]/15"
       >
-        <Icon className="w-5 h-5" style={{ color: '#b45309' }} />
+        <Icon className="w-5 h-5 text-[#c8a24e]" />
       </div>
       <div className="space-y-1">
-        <p className="text-sm font-medium" style={{ color: '#1a1a1a' }}>{title}</p>
-        <p className="text-xs" style={{ color: '#6b6b6b' }}>{description}</p>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       {action && (
         <Button
           variant="outline"
           size="sm"
-          className="mt-2"
-          style={{
-            borderColor: '#d4d4d0',
-            color: '#b45309',
-          }}
+          className="mt-2 border-border text-[#c8a24e]"
           onClick={action.onClick}
         >
           <Plus className="w-4 h-4 mr-1.5" />
@@ -190,38 +178,38 @@ function OverviewPage() {
 
       {/* Infrastructure */}
       <AdminCard>
-        <h3 className="text-sm font-semibold mb-4" style={{ color: '#1a1a1a' }}>Infrastructure Status</h3>
+        <h3 className="text-sm font-semibold mb-4 text-foreground">Infrastructure Status</h3>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Server className="w-4 h-4" style={{ color: '#6b6b6b' }} />
-              <span className="text-sm" style={{ color: '#1a1a1a' }}>Database (Supabase)</span>
+              <Server className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Database (Supabase)</span>
             </div>
             <span className={cn('text-xs font-medium px-2.5 py-0.5 rounded-full', isSupabaseConfigured()
-              ? 'text-green-700 bg-green-50 border border-green-200'
-              : 'text-amber-700 bg-amber-50 border border-amber-200'
+              ? 'text-green-400 bg-green-500/10 border border-green-500/20'
+              : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
             )}>
               {isSupabaseConfigured() ? 'Connected' : 'Not configured'}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4" style={{ color: '#6b6b6b' }} />
-              <span className="text-sm" style={{ color: '#1a1a1a' }}>Authentication</span>
+              <Shield className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Authentication</span>
             </div>
             <span className={cn('text-xs font-medium px-2.5 py-0.5 rounded-full', isSupabaseConfigured()
-              ? 'text-green-700 bg-green-50 border border-green-200'
-              : 'text-amber-700 bg-amber-50 border border-amber-200'
+              ? 'text-green-400 bg-green-500/10 border border-green-500/20'
+              : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
             )}>
               {isSupabaseConfigured() ? 'Active (Email + Google OAuth)' : 'Demo mode only'}
             </span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4" style={{ color: '#6b6b6b' }} />
-              <span className="text-sm" style={{ color: '#1a1a1a' }}>System Health</span>
+              <Activity className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">System Health</span>
             </div>
-            <span className="text-xs font-medium px-2.5 py-0.5 rounded-full text-green-700 bg-green-50 border border-green-200">
+            <span className="text-xs font-medium px-2.5 py-0.5 rounded-full text-green-400 bg-green-500/10 border border-green-500/20">
               Operational
             </span>
           </div>
@@ -230,26 +218,25 @@ function OverviewPage() {
 
       {/* Recent activity */}
       <AdminCard>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: '#1a1a1a' }}>Recent Activity</h3>
+        <h3 className="text-sm font-semibold mb-3 text-foreground">Recent Activity</h3>
         <div className="space-y-2">
           {auditEvents.slice(0, 5).map((evt) => (
-            <div key={evt.id} className="flex items-center justify-between py-2 border-b last:border-b-0" style={{ borderColor: '#e8e8e4' }}>
+            <div key={evt.id} className="flex items-center justify-between py-2 border-b last:border-b-0 border-border">
               <div className="flex items-center gap-3">
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-                  style={{ background: 'rgba(180, 83, 9, 0.06)', color: '#b45309' }}
+                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#c8a24e]/8 text-[#c8a24e]"
                 >
                   {evt.action}
                 </span>
-                <span className="text-sm" style={{ color: '#1a1a1a' }}>{evt.details || '—'}</span>
+                <span className="text-sm text-foreground">{evt.details || '\u2014'}</span>
               </div>
-              <span className="text-[11px] font-mono shrink-0 ml-4" style={{ color: '#6b6b6b' }}>
+              <span className="text-[11px] font-mono shrink-0 ml-4 text-muted-foreground">
                 {formatDateTime(evt.createdAt)}
               </span>
             </div>
           ))}
           {auditEvents.length === 0 && (
-            <p className="text-xs text-center py-4" style={{ color: '#6b6b6b' }}>No recent activity</p>
+            <p className="text-xs text-center py-4 text-muted-foreground">No recent activity</p>
           )}
         </div>
       </AdminCard>
@@ -270,7 +257,7 @@ function ProvidersPage() {
               <div
                 className={cn('w-2.5 h-2.5 rounded-full', healthColor(p.health), healthGlow(p.health))}
               />
-              <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#6b6b6b' }}>
+              <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
                 {p.health}
               </span>
             </div>
@@ -278,23 +265,24 @@ function ProvidersPage() {
             {/* Provider info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5">
-                <span className="text-sm font-medium" style={{ color: '#1a1a1a' }}>{p.name}</span>
+                <span className="text-sm font-medium text-foreground">{p.name}</span>
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-                  style={{ background: 'rgba(180, 83, 9, 0.06)', color: '#b45309' }}
+                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#c8a24e]/8 text-[#c8a24e]"
                 >
                   {p.category}
                 </span>
               </div>
               <div className="flex items-center gap-4 mt-1.5">
-                <span className="flex items-center gap-1.5 text-[11px]" style={{ color: '#6b6b6b' }}>
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <Clock className="w-3 h-3" />
                   {formatTime(p.lastChecked)}
                 </span>
                 {p.latencyMs !== null && (
-                  <span className="flex items-center gap-1.5 text-[11px] font-mono" style={{ color: '#6b6b6b' }}>
+                  <span className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
                     <Activity className="w-3 h-3" />
-                    <span style={{ color: p.latencyMs > 500 ? '#dc2626' : p.latencyMs > 300 ? '#d97706' : '#16a34a' }}>
+                    <span className={cn(
+                      p.latencyMs > 500 ? 'text-red-500' : p.latencyMs > 300 ? 'text-amber-500' : 'text-green-500'
+                    )}>
                       {p.latencyMs}ms
                     </span>
                   </span>
@@ -304,7 +292,7 @@ function ProvidersPage() {
 
             {/* Toggle */}
             <div className="flex items-center gap-3">
-              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: p.isEnabled ? '#16a34a' : '#6b6b6b' }}>
+              <span className={cn('text-[10px] uppercase tracking-wider font-semibold', p.isEnabled ? 'text-green-500' : 'text-muted-foreground')}>
                 {p.isEnabled ? 'Enabled' : 'Disabled'}
               </span>
               <Switch
@@ -323,7 +311,7 @@ function SecurityPage() {
   const { securityEvents } = useAdminStore();
 
   if (securityEvents.length === 0) {
-    return <EmptyState icon={Shield} title="No security events" description="All clear — no security events recorded." />;
+    return <EmptyState icon={Shield} title="No security events" description="All clear \u2014 no security events recorded." />;
   }
 
   return (
@@ -331,11 +319,7 @@ function SecurityPage() {
       {securityEvents.map((evt) => (
         <AdminCard
           key={evt.id}
-          className={cn('py-3', !evt.resolved && 'border-l-2')}
-          style={{
-            background: '#f8f8f6',
-            borderColor: !evt.resolved ? '#dc2626' : '#d4d4d0',
-          }}
+          className={cn('py-3', !evt.resolved && 'border-l-2 border-l-red-500')}
         >
           <div className="flex items-start gap-4">
             {/* Severity icon */}
@@ -354,32 +338,32 @@ function SecurityPage() {
             {/* Event details */}
             <div className="flex-1 min-w-0 space-y-1.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-medium" style={{ color: '#1a1a1a' }}>
+                <span className="text-sm font-medium text-foreground">
                   {evt.eventType.replace(/_/g, ' ').toUpperCase()}
                 </span>
                 <span
                   className={cn(
                     'text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded',
-                    evt.severity === 'low' && 'bg-gray-100 text-gray-600',
-                    evt.severity === 'medium' && 'bg-amber-50 text-amber-700 border border-amber-200',
-                    evt.severity === 'high' && 'bg-red-50 text-red-700 border border-red-200',
-                    evt.severity === 'critical' && 'bg-red-100 text-red-700 border border-red-300',
+                    evt.severity === 'low' && 'bg-muted text-muted-foreground',
+                    evt.severity === 'medium' && 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+                    evt.severity === 'high' && 'bg-red-500/10 text-red-400 border border-red-500/20',
+                    evt.severity === 'critical' && 'bg-red-500/15 text-red-400 border border-red-500/25',
                   )}
                 >
                   {evt.severity.toUpperCase()}
                 </span>
               </div>
               {evt.details && (
-                <p className="text-xs leading-relaxed" style={{ color: '#6b6b6b' }}>{evt.details}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{evt.details}</p>
               )}
               <div className="flex items-center gap-4">
                 {evt.ip && (
-                  <span className="flex items-center gap-1 text-[11px] font-mono" style={{ color: '#6b6b6b' }}>
+                  <span className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
                     <Activity className="w-3 h-3" />
                     {evt.ip}
                   </span>
                 )}
-                <span className="flex items-center gap-1 text-[11px]" style={{ color: '#6b6b6b' }}>
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Clock className="w-3 h-3" />
                   {formatDateTime(evt.createdAt)}
                 </span>
@@ -390,8 +374,10 @@ function SecurityPage() {
             <div className="flex flex-col items-center gap-1.5 pt-0.5">
               <Switch checked={evt.resolved} onCheckedChange={() => {}} />
               <span
-                className="text-[10px] font-semibold uppercase tracking-wider"
-                style={{ color: evt.resolved ? '#16a34a' : '#dc2626' }}
+                className={cn(
+                  'text-[10px] font-semibold uppercase tracking-wider',
+                  evt.resolved ? 'text-green-500' : 'text-red-500'
+                )}
               >
                 {evt.resolved ? 'Resolved' : 'Open'}
               </span>
@@ -414,20 +400,20 @@ function AuditPage() {
     <AdminCard className="p-0 overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow style={{ borderColor: '#d4d4d0' }}>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#b45309' }}>
+          <TableRow className="border-border">
+            <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-[#c8a24e]">
               Timestamp
             </TableHead>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#b45309' }}>
+            <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-[#c8a24e]">
               Action
             </TableHead>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#b45309' }}>
+            <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-[#c8a24e]">
               Resource
             </TableHead>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#b45309' }}>
+            <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-[#c8a24e]">
               User
             </TableHead>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#b45309' }}>
+            <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-[#c8a24e]">
               Details
             </TableHead>
           </TableRow>
@@ -436,28 +422,26 @@ function AuditPage() {
           {auditEvents.map((evt) => (
             <TableRow
               key={evt.id}
-              className="transition-colors hover:bg-white/60"
-              style={{ borderColor: '#e8e8e4' }}
+              className="transition-colors hover:bg-accent border-border"
             >
-              <TableCell className="font-mono text-[11px]" style={{ color: '#6b6b6b' }}>
+              <TableCell className="font-mono text-[11px] text-muted-foreground">
                 {formatDateTime(evt.createdAt)}
               </TableCell>
               <TableCell>
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-                  style={{ background: 'rgba(180, 83, 9, 0.06)', color: '#b45309' }}
+                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#c8a24e]/8 text-[#c8a24e]"
                 >
                   {evt.action}
                 </span>
               </TableCell>
-              <TableCell className="font-mono text-xs" style={{ color: '#1a1a1a' }}>
-                {evt.resource || '—'}
+              <TableCell className="font-mono text-xs text-foreground">
+                {evt.resource || '\u2014'}
               </TableCell>
-              <TableCell className="font-mono text-xs" style={{ color: '#6b6b6b' }}>
-                {evt.userId || '—'}
+              <TableCell className="font-mono text-xs text-muted-foreground">
+                {evt.userId || '\u2014'}
               </TableCell>
-              <TableCell className="text-xs max-w-xs truncate" style={{ color: '#6b6b6b' }}>
-                {evt.details || '—'}
+              <TableCell className="text-xs max-w-xs truncate text-muted-foreground">
+                {evt.details || '\u2014'}
               </TableCell>
             </TableRow>
           ))}
@@ -476,18 +460,13 @@ function FeaturesPage() {
         <AdminCard key={flag.key} className="flex items-center gap-4 py-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
-              <ToggleLeft className="w-4 h-4 shrink-0" style={{ color: '#b45309' }} />
-              <span className="font-mono text-sm" style={{ color: '#1a1a1a' }}>{flag.key}</span>
+              <ToggleLeft className="w-4 h-4 shrink-0 text-[#c8a24e]" />
+              <span className="font-mono text-sm text-foreground">{flag.key}</span>
             </div>
             {flag.config && (
               <div className="mt-2 ml-6">
                 <pre
-                  className="text-[11px] font-mono rounded-md px-3 py-2 overflow-x-auto border"
-                  style={{
-                    background: '#f3f3f0',
-                    color: '#6b6b6b',
-                    borderColor: '#d4d4d0',
-                  }}
+                  className="text-[11px] font-mono rounded-md px-3 py-2 overflow-x-auto border bg-accent text-muted-foreground border-border"
                 >
                   {JSON.stringify(flag.config, null, 2)}
                 </pre>
@@ -497,8 +476,10 @@ function FeaturesPage() {
 
           <div className="flex items-center gap-3">
             <span
-              className="text-[10px] uppercase tracking-wider font-semibold"
-              style={{ color: flag.isEnabled ? '#16a34a' : '#6b6b6b' }}
+              className={cn(
+                'text-[10px] uppercase tracking-wider font-semibold',
+                flag.isEnabled ? 'text-green-500' : 'text-muted-foreground'
+              )}
             >
               {flag.isEnabled ? 'Active' : 'Inactive'}
             </span>
@@ -529,26 +510,24 @@ function DevicesPage() {
       {deviceAuthorizations.map((device) => (
         <AdminCard key={device.id} className="flex items-center gap-4 py-3">
           <div
-            className="w-9 h-9 rounded-md flex items-center justify-center shrink-0"
-            style={{ background: 'rgba(180, 83, 9, 0.06)', border: '1px solid rgba(180, 83, 9, 0.12)' }}
+            className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-[#c8a24e]/8 border border-[#c8a24e]/15"
           >
-            <Smartphone className="w-4 h-4" style={{ color: '#b45309' }} />
+            <Smartphone className="w-4 h-4 text-[#c8a24e]" />
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
-              <span className="text-sm font-medium" style={{ color: '#1a1a1a' }}>
+              <span className="text-sm font-medium text-foreground">
                 {device.deviceName || 'Unknown Device'}
               </span>
               <span
-                className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-                style={{ background: 'rgba(180, 83, 9, 0.06)', color: '#b45309' }}
+                className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#c8a24e]/8 text-[#c8a24e]"
               >
                 {device.provider}
               </span>
             </div>
             {device.lastUsedAt && (
-              <span className="flex items-center gap-1.5 mt-1 text-[11px]" style={{ color: '#6b6b6b' }}>
+              <span className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
                 <Clock className="w-3 h-3" />
                 Last used {formatTime(device.lastUsedAt)}
               </span>
@@ -562,7 +541,7 @@ function DevicesPage() {
                 device.isActive ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]' : 'bg-gray-400'
               )}
             />
-            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: device.isActive ? '#16a34a' : '#6b6b6b' }}>
+            <span className={cn('text-[11px] font-semibold uppercase tracking-wider', device.isActive ? 'text-green-500' : 'text-muted-foreground')}>
               {device.isActive ? 'Active' : 'Inactive'}
             </span>
           </div>
@@ -576,26 +555,26 @@ function SettingsPage() {
   return (
     <div className="space-y-5">
       <AdminCard>
-        <h3 className="text-sm font-semibold mb-4" style={{ color: '#1a1a1a' }}>General Settings</h3>
+        <h3 className="text-sm font-semibold mb-4 text-foreground">General Settings</h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: '#e8e8e4' }}>
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
-              <div className="text-sm" style={{ color: '#1a1a1a' }}>Session Timeout</div>
-              <div className="text-xs mt-0.5" style={{ color: '#6b6b6b' }}>Auto-logout after inactivity</div>
+              <div className="text-sm text-foreground">Session Timeout</div>
+              <div className="text-xs mt-0.5 text-muted-foreground">Auto-logout after inactivity</div>
             </div>
-            <span className="text-sm font-mono" style={{ color: '#1a1a1a' }}>30 min</span>
+            <span className="text-sm font-mono text-foreground">30 min</span>
           </div>
-          <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: '#e8e8e4' }}>
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
-              <div className="text-sm" style={{ color: '#1a1a1a' }}>Max Concurrent Sessions</div>
-              <div className="text-xs mt-0.5" style={{ color: '#6b6b6b' }}>Maximum allowed logged-in sessions</div>
+              <div className="text-sm text-foreground">Max Concurrent Sessions</div>
+              <div className="text-xs mt-0.5 text-muted-foreground">Maximum allowed logged-in sessions</div>
             </div>
-            <span className="text-sm font-mono" style={{ color: '#1a1a1a' }}>3</span>
+            <span className="text-sm font-mono text-foreground">3</span>
           </div>
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm" style={{ color: '#1a1a1a' }}>Maintenance Mode</div>
-              <div className="text-xs mt-0.5" style={{ color: '#6b6b6b' }}>Temporarily disable user access</div>
+              <div className="text-sm text-foreground">Maintenance Mode</div>
+              <div className="text-xs mt-0.5 text-muted-foreground">Temporarily disable user access</div>
             </div>
             <Switch checked={false} onCheckedChange={() => {}} />
           </div>
@@ -603,26 +582,26 @@ function SettingsPage() {
       </AdminCard>
 
       <AdminCard>
-        <h3 className="text-sm font-semibold mb-4" style={{ color: '#1a1a1a' }}>Notifications</h3>
+        <h3 className="text-sm font-semibold mb-4 text-foreground">Notifications</h3>
         <div className="space-y-4">
-          <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: '#e8e8e4' }}>
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
-              <div className="text-sm" style={{ color: '#1a1a1a' }}>Security Alerts</div>
-              <div className="text-xs mt-0.5" style={{ color: '#6b6b6b' }}>Receive notifications for security events</div>
+              <div className="text-sm text-foreground">Security Alerts</div>
+              <div className="text-xs mt-0.5 text-muted-foreground">Receive notifications for security events</div>
             </div>
             <Switch checked={true} onCheckedChange={() => {}} />
           </div>
-          <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: '#e8e8e4' }}>
+          <div className="flex items-center justify-between py-2 border-b border-border">
             <div>
-              <div className="text-sm" style={{ color: '#1a1a1a' }}>Provider Alerts</div>
-              <div className="text-xs mt-0.5" style={{ color: '#6b6b6b' }}>Get notified when providers go down</div>
+              <div className="text-sm text-foreground">Provider Alerts</div>
+              <div className="text-xs mt-0.5 text-muted-foreground">Get notified when providers go down</div>
             </div>
             <Switch checked={true} onCheckedChange={() => {}} />
           </div>
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm" style={{ color: '#1a1a1a' }}>Audit Digest</div>
-              <div className="text-xs mt-0.5" style={{ color: '#6b6b6b' }}>Daily summary of audit events</div>
+              <div className="text-sm text-foreground">Audit Digest</div>
+              <div className="text-xs mt-0.5 text-muted-foreground">Daily summary of audit events</div>
             </div>
             <Switch checked={false} onCheckedChange={() => {}} />
           </div>

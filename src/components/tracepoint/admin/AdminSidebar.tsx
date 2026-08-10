@@ -52,31 +52,21 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        'h-screen flex flex-col border-r transition-all duration-200 shrink-0 admin-border',
+        'h-screen flex flex-col border-r border-border transition-all duration-200 shrink-0 bg-sidebar',
         collapsed ? 'w-14' : 'w-56'
       )}
-      style={{ background: '#f3f3f0', borderColor: '#d4d4d0' }}
     >
       {/* Brand header */}
-      <div
-        className="flex items-center gap-2.5 px-3 h-12 border-b shrink-0"
-        style={{ borderColor: '#d4d4d0' }}
-      >
-        <div
-          className="flex items-center justify-center w-7 h-7 rounded shrink-0"
-          style={{ background: 'rgba(180, 83, 9, 0.08)' }}
-        >
-          <Shield className="w-3.5 h-3.5" style={{ color: '#b45309' }} />
+      <div className="flex items-center gap-2.5 px-3 h-12 border-b border-border shrink-0">
+        <div className="flex items-center justify-center w-7 h-7 rounded shrink-0 bg-accent">
+          <Shield className="w-3.5 h-3.5 text-[#c8a24e]" />
         </div>
         {!collapsed && (
           <div className="flex flex-col min-w-0">
-            <span
-              className="text-[13px] font-semibold tracking-wide leading-tight"
-              style={{ color: '#1a1a1a' }}
-            >
+            <span className="text-[13px] font-semibold tracking-wide leading-tight text-foreground">
               Tracepoint
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-widest" style={{ color: '#b45309' }}>
+            <span className="text-[10px] font-medium uppercase tracking-widest text-[#c8a24e]">
               Admin
             </span>
           </div>
@@ -96,14 +86,9 @@ export function AdminSidebar({
               className={cn(
                 'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-all duration-150',
                 isActive
-                  ? 'font-medium'
-                  : 'hover:bg-white/60'
+                  ? 'font-medium bg-accent text-[#c8a24e] [box-shadow:inset_3px_0_0_#c8a24e]'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               )}
-              style={{
-                background: isActive ? 'rgba(180, 83, 9, 0.08)' : undefined,
-                color: isActive ? '#b45309' : '#525252',
-                boxShadow: isActive ? 'inset 3px 0 0 #b45309' : undefined,
-              }}
               title={collapsed ? item.label : undefined}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -114,12 +99,11 @@ export function AdminSidebar({
       </nav>
 
       {/* Footer */}
-      <div className="p-2 space-y-1 border-t" style={{ borderColor: '#d4d4d0' }}>
+      <div className="p-2 space-y-1 border-t border-border">
         {!collapsed && (
           <button
             onClick={onBackToApp}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors hover:bg-white/60"
-            style={{ color: '#6b6b6b' }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             Back to App
@@ -127,8 +111,7 @@ export function AdminSidebar({
         )}
         <button
           onClick={onToggleCollapse}
-          className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/60"
-          style={{ color: '#6b6b6b' }}
+          className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[11px] transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
         >
           {collapsed ? (
             <ChevronRight className="w-3.5 h-3.5" />

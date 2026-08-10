@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     // Use the env var. Even though it has NEXT_PUBLIC_ prefix, on the server
     // side it is accessible via process.env and the request originates from
     // the server (not the browser), so OpenAI won't block it.
-    const apiKey = process.env.NEXT_PUBLIC_OPENAI_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       console.error('[/api/ai] OpenAI API key is not configured');
