@@ -1,0 +1,288 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   TRACEPOINT — Stealth Military Theme
+   Tactical precision, not gaming aesthetics.
+   Dark charcoal + olive panels + amber accents + red alerts
+   ============================================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Tracepoint custom colors */
+  --color-tp-amber: var(--tp-amber);
+  --color-tp-amber-dim: var(--tp-amber-dim);
+  --color-tp-red: var(--tp-red);
+  --color-tp-green: var(--tp-green);
+  --color-tp-olive: var(--tp-olive);
+  --color-tp-olive-dim: var(--tp-olive-dim);
+  --color-tp-surface: var(--tp-surface);
+  --color-tp-surface-hover: var(--tp-surface-hover);
+  --color-tp-border: var(--tp-border);
+  --color-tp-text: var(--tp-text);
+  --color-tp-text-dim: var(--tp-text-dim);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  /* Tracepoint stealth military palette */
+  --tp-amber: #f59e0b;
+  --tp-amber-dim: #b45309;
+  --tp-red: #ef4444;
+  --tp-green: #22c55e;
+  --tp-olive: #4a5a3a;
+  --tp-olive-dim: #2a3322;
+  --tp-surface: #1e2420;
+  --tp-surface-hover: #283028;
+  --tp-border: #3a4a3a;
+  --tp-text: #e8e8e0;
+  --tp-text-dim: #8a9a8a;
+
+  --background: #121614;
+  --foreground: #e8e8e0;
+  --card: #1a201c;
+  --card-foreground: #e8e8e0;
+  --popover: #1a201c;
+  --popover-foreground: #e8e8e0;
+  --primary: #f59e0b;
+  --primary-foreground: #121614;
+  --secondary: #252a22;
+  --secondary-foreground: #e8e8e0;
+  --muted: #252a22;
+  --muted-foreground: #8a9a8a;
+  --accent: #2a3322;
+  --accent-foreground: #e8e8e0;
+  --destructive: #ef4444;
+  --border: #3a4a3a;
+  --input: #3a4a3a;
+  --ring: #f59e0b;
+  --chart-1: #f59e0b;
+  --chart-2: #22c55e;
+  --chart-3: #ef4444;
+  --chart-4: #8a9a8a;
+  --chart-5: #4a5a3a;
+  --sidebar: #161c18;
+  --sidebar-foreground: #e8e8e0;
+  --sidebar-primary: #f59e0b;
+  --sidebar-primary-foreground: #121614;
+  --sidebar-accent: #2a3322;
+  --sidebar-accent-foreground: #e8e8e0;
+  --sidebar-border: #3a4a3a;
+  --sidebar-ring: #f59e0b;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* ============================================================
+   TRACEPOINT COMPONENT STYLES
+   ============================================================ */
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #121614;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a4a3a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a5a4a;
+}
+
+/* HUD-style data display */
+.tp-hud {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tp-text-dim);
+}
+
+.tp-hud-value {
+  color: var(--tp-amber);
+  font-weight: 600;
+}
+
+/* Confidence meter */
+.tp-confidence-ring {
+  transform: rotate(-90deg);
+}
+
+/* Pulse animation for live indicators */
+@keyframes tp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.tp-pulse {
+  animation: tp-pulse 2s ease-in-out infinite;
+}
+
+/* Scanning line animation */
+@keyframes tp-scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.tp-scan-line {
+  animation: tp-scan 3s linear infinite;
+}
+
+/* Status badge glow */
+.tp-status-live {
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+}
+
+.tp-status-alert {
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+/* Evidence source tag */
+.tp-source-tag {
+  font-size: 0.625rem;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: var(--tp-olive-dim);
+  color: var(--tp-amber);
+  font-family: var(--font-geist-mono), monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Demo watermark */
+.tp-demo-watermark {
+  position: relative;
+}
+.tp-demo-watermark::after {
+  content: 'DEMO DATA — NOT REAL';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  color: rgba(245, 158, 11, 0.6);
+  background: rgba(18, 22, 20, 0.8);
+  padding: 2px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Grid overlay for HUD feel */
+.tp-grid-overlay {
+  background-image:
+    linear-gradient(rgba(58, 74, 58, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 74, 58, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Corner brackets for cards */
+.tp-bracket-card {
+  position: relative;
+}
+.tp-bracket-card::before,
+.tp-bracket-card::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--tp-amber);
+  opacity: 0.5;
+}
+.tp-bracket-card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.tp-bracket-card::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+
+/* Investigation progress bar */
+.tp-progress-track {
+  background: var(--tp-olive-dim);
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+}
+.tp-progress-fill {
+  height: 100%;
+  background: var(--tp-amber);
+  border-radius: 1px;
+  transition: width 0.5s ease;
+}
+
+/* Globe container */
+.tp-globe-container {
+  background: radial-gradient(ellipse at center, #1a2420 0%, #121614 70%);
+}
+
+/* View switcher active indicator */
+.tp-view-active {
+  color: var(--tp-amber);
+  border-bottom: 2px solid var(--tp-amber);
+}
+
+/* Faint grid lines on panels */
+.tp-panel {
+  background: linear-gradient(135deg, #1a201c 0%, #1e2420 100%);
+  border: 1px solid var(--tp-border);
+}

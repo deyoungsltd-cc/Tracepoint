@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../db/tracepoint.db"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  displayName   String?
+  role          String    @default("standard") // admin, pro, standard
+  mfaEnabled    Boolean   @default(false)
+  mfaSecret     String?
+  emailVerified Boolean   @default(false)
+  isDemo        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  investigations Investigation[]
+  auditEvents   AuditEvent[]
+  securityEvents SecurityEvent[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  retentionDays Int    @default(30)
+ archiveDays Int      @default(365)
+ createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     OrgMember[]
+}
+
+model OrgMember {
+  id             String      @id @default(uuid())
+  userId         String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String      @default("member") // owner, admin, member
+  joinedAt       DateTime    @default(now())
+  @@unique([userId, organizationId])
+}
+
+model Investigation {
+  id            String             @id @default(uuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        String             @default("pending") // pending, running, completed, failed, archived
+  depth         String             @default("standard") // quick, standard, deep
+  isBatch       Boolean            @default(false)
+  batchId       String?
+
+  // Input identifiers
+  inputPhone    String?
+  inputPhoneNormalized String?
+  inputEmail    String?
+  inputName     String?
+  inputBusiness String?
+  inputRegion   String?
+  inputCountry  String?
+  inputState    String?
+  inputCity     String?
+
+  // Results summary
+  summary       String?
+  identityCount Int                @default(0)
+  evidenceCount Int                @default(0)
+  sourceCount   Int                @default(0)
+  confidence    Float?
+  hasConflicts  Boolean            @default(false)
+  locationStatus String           @default("unavailable") // live, last_known, historical, unavailable
+
+  // Retention
+  archivedAt    DateTime?
+  purgedAt      DateTime?
+  isDemoData    Boolean            @default(false)
+
+  // Timestamps
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  candidates    IdentityCandidate[]
+  evidence      EvidenceItem[]
+  locations     DeviceLocation[]
+  timeline      TimelineEvent[]
+}
+
+model IdentityCandidate {
+  id            String        @id @default(uuid())
+  investigationId String
+  investigation  Investigation  @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  rank          Int
+  name          String?
+  phone         String?
+  email         String?
+  business      String?
+  website       String?
+  location      String?
+  photoUrl      String?
+  confidence    Float         @default(0)
+  verifiedStatus String        @default("unverified") // verified, strongly_corroborated, possible, unverified, conflicting
+  matchFields   String        // JSON array of matched fields
+  createdAt     DateTime      @default(now())
+}
+
+model EvidenceItem {
+  id               String        @id @default(uuid())
+  investigationId  String
+  investigation     Investigation  @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  candidateId      String?
+  claim            String
+  sourceUrl        String?
+  sourceName       String
+  sourceType       String        // official_website, business_directory, social_profile, news, registry, etc.
+  discoveredAt     DateTime      @default(now())
+  publishedAt      DateTime?
+  excerpt          String?
+  reliabilityScore Float         @default(0)
+  relevanceScore   Float         @default(0)
+  freshnessScore   Float         @default(0)
+  verificationStatus String       @default("unverified") // verified, corroborated, possible, unverified, conflicting
+}
+
+model DeviceLocation {
+  id              String        @id @default(uuid())
+  investigationId String
+  investigation   Investigation  @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  deviceId        String?
+  provider        String        // apple_find_my, google_find_my_device, samsung_smartthings, custom
+  status          String        // live, last_known, historical
+  latitude        Float?
+  longitude       Float?
+  accuracy        Float?
+  address         String?
+  timestamp       DateTime?
+  freshness       String        // live, recent, today, old, stale
+  deviceStatus    String?
+  batteryLevel    Float?
+  networkType     String?
+  createdAt       DateTime      @default(now())
+}
+
+model DeviceAuthorization {
+  id            String   @id @default(uuid())
+  userId        String
+  provider      String   // apple, google, samsung, custom
+  deviceId      String?
+  deviceName    String?
+  accessToken   String?
+  refreshToken  String?
+  expiresAt     DateTime?
+  isActive      Boolean  @default(true)
+  lastUsedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TimelineEvent {
+  id               String        @id @default(uuid())
+  investigationId  String
+  investigation     Investigation  @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+  eventType        String
+  description      String
+  metadata         String? // JSON
+  timestamp        DateTime      @default(now())
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  resource  String?
+  details   String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  eventType String   // suspicious_login, brute_force, privilege_escalation, etc.
+  severity  String   // low, medium, high, critical
+  details   String?
+  ip        String?
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ProviderConfig {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  category    String   // intelligence, location, ai
+  isEnabled   Boolean  @default(false)
+  config      String?
+  healthStatus String  @default("unknown") // healthy, degraded, down, unknown
+  lastChecked  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FeatureFlag {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  isEnabled Boolean  @default(false)
+  config    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

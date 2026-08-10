@@ -1,0 +1,715 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useState, useRef, useCallback } from 'react';
+     4→     4→import {
+     5→     5→  Phone,
+     6→     6→  Mail,
+     7→     7→  User,
+     8→     8→  Building2,
+     9→     9→  MapPin,
+    10→    10→  Search,
+    11→    11→  Upload,
+    12→    12→  AlertTriangle,
+    13→    13→  CheckCircle2,
+    14→    14→  FileText,
+    15→    15→  Target,
+    16→    16→  Database,
+    17→    17→  ChevronRight,
+    18→    18→  Shield,
+    19→    19→  Zap,
+    20→    20→  Eye,
+    21→    21→  Clock,
+    22→    22→} from 'lucide-react';
+    23→    23→import { Button } from '@/components/ui/button';
+    24→    24→import { Input } from '@/components/ui/input';
+    25→    25→import { Label } from '@/components/ui/label';
+    26→    26→import {
+    27→    27→  Select,
+    28→    28→  SelectContent,
+    29→    29→  SelectItem,
+    30→    30→  SelectTrigger,
+    31→    31→  SelectValue,
+    32→    32→} from '@/components/ui/select';
+    33→    33→import { Badge } from '@/components/ui/badge';
+    34→    34→import { Separator } from '@/components/ui/separator';
+    35→    35→import { useInvestigationStore } from '@/lib/store/app';
+    36→    36→import type { InvestigationDepth } from '@/lib/types';
+    37→    37→
+    38→    38→// --- Phone normalization ---
+    39→    39→function normalizePhone(phone: string): string {
+    40→    40→  const digits = phone.replace(/\D/g, '');
+    41→    41→  if (digits.length === 0) return '';
+    42→    42→  if (digits.startsWith('1') && digits.length === 11) return `+${digits}`;
+    43→    43→  return `+${digits}`;
+    44→    44→}
+    45→    45→
+    46→    46→// --- Country list ---
+    47→    47→const COUNTRIES = [
+    48→    48→  { value: 'US', label: 'United States' },
+    49→    49→  { value: 'CA', label: 'Canada' },
+    50→    50→  { value: 'GB', label: 'United Kingdom' },
+    51→    51→  { value: 'AU', label: 'Australia' },
+    52→    52→  { value: 'DE', label: 'Germany' },
+    53→    53→  { value: 'FR', label: 'France' },
+    54→    54→  { value: 'JP', label: 'Japan' },
+    55→    55→  { value: 'BR', label: 'Brazil' },
+    56→    56→  { value: 'IN', label: 'India' },
+    57→    57→  { value: 'MX', label: 'Mexico' },
+    58→    58→];
+    59→    59→
+    60→    60→// --- Depth options ---
+    61→    61→const DEPTH_OPTIONS: { value: InvestigationDepth; label: string; desc: string; icon: typeof Zap }[] = [
+    62→    62→  { value: 'quick', label: 'QUICK', desc: '30s scan', icon: Zap },
+    63→    63→  { value: 'standard', label: 'STANDARD', desc: '2 min deep', icon: Target },
+    64→    64→  { value: 'deep', label: 'DEEP', desc: '5 min full', icon: Shield },
+    65→    65→];
+    66→    66→
+    67→    67→// --- Confidence meter SVG ---
+    68→    68→function ConfidenceMeter({ score }: { score: number }) {
+    69→    69→  const radius = 40;
+    70→    70→  const circumference = 2 * Math.PI * radius;
+    71→    71→  const offset = circumference - (score / 100) * circumference;
+    72→    72→  const color =
+    73→    73→    score >= 80
+    74→    74→      ? '#22c55e'
+    75→    75→      : score >= 50
+    76→    76→        ? '#f59e0b'
+    77→    77→        : '#ef4444';
+    78→    78→
+    79→    79→  return (
+    80→    80→    <div className="relative flex items-center justify-center w-28 h-28">
+    81→    81→      <svg className="tp-confidence-ring w-28 h-28" viewBox="0 0 100 100">
+    82→    82→        {/* Track */}
+    83→    83→        <circle
+    84→    84→          cx="50"
+    85→    85→          cy="50"
+    86→    86→          r={radius}
+    87→    87→          fill="none"
+    88→    88→          stroke="#2a3322"
+    89→    89→          strokeWidth="6"
+    90→    90→        />
+    91→    91→        {/* Fill */}
+    92→    92→        <circle
+    93→    93→          cx="50"
+    94→    94→          cy="50"
+    95→    95→          r={radius}
+    96→    96→          fill="none"
+    97→    97→          stroke={color}
+    98→    98→          strokeWidth="6"
+    99→    99→          strokeLinecap="round"
+   100→   100→          strokeDasharray={circumference}
+   101→   101→          strokeDashoffset={offset}
+   102→   102→          className="transition-all duration-1000 ease-out"
+   103→   103→        />
+   104→   104→      </svg>
+   105→   105→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   106→   106→        <span className="text-2xl font-bold" style={{ color }}>
+   107→   107→          {score}
+   108→   108→        </span>
+   109→   109→        <span className="tp-hud text-[0.6rem]">confidence</span>
+   110→   110→      </div>
+   111→   111→    </div>
+   112→   112→  );
+   113→   113→}
+   114→   114→
+   115→   115→// --- Stat card ---
+   116→   116→function StatCard({
+   117→   117→  icon: Icon,
+   118→   118→  label,
+   119→   119→  value,
+   120→   120→  color,
+   121→   121→}: {
+   122→   122→  icon: typeof Target;
+   123→   123→  label: string;
+   124→   124→  value: number | string;
+   125→   125→  color: string;
+   126→   126→}) {
+   127→   127→  return (
+   128→   128→    <div className="tp-bracket-card tp-panel rounded-sm p-4 flex items-center gap-3">
+   129→   129→      <div
+   130→   130→        className="flex items-center justify-center w-9 h-9 rounded-sm"
+   131→   131→        style={{ background: `${color}15` }}
+   132→   132→      >
+   133→   133→        <Icon className="w-4 h-4" style={{ color }} />
+   134→   134→      </div>
+   135→   135→      <div>
+   136→   136→        <p className="tp-hud text-[0.65rem]">{label}</p>
+   137→   137→        <p className="tp-hud-value text-lg font-bold">{value}</p>
+   138→   138→      </div>
+   139→   139→    </div>
+   140→   140→  );
+   141→   141→}
+   142→   142→
+   143→   143→// ==============================================================
+   144→   144→// MAIN COMPONENT
+   145→   145→// ==============================================================
+   146→   146→export default function InvestigationWorkspace() {
+   147→   147→  const {
+   148→   148→    currentInvestigation,
+   149→   149→    progress,
+   150→   150→    isRunning,
+   151→   151→    aiAssessment,
+   152→   152→    startInvestigation,
+   153→   153→    startBatchInvestigation,
+   154→   154→    clearCurrent,
+   155→   155→  } = useInvestigationStore();
+   156→   156→
+   157→   157→  // Form state
+   158→   158→  const [phone, setPhone] = useState('');
+   159→   159→  const [email, setEmail] = useState('');
+   160→   160→  const [name, setName] = useState('');
+   161→   161→  const [business, setBusiness] = useState('');
+   162→   162→  const [country, setCountry] = useState('US');
+   163→   163→  const [state, setState] = useState('');
+   164→   164→  const [city, setCity] = useState('');
+   165→   165→  const [depth, setDepth] = useState<InvestigationDepth>('standard');
+   166→   166→
+   167→   167→  const fileInputRef = useRef<HTMLInputElement>(null);
+   168→   168→
+   169→   169→  const isCompleted =
+   170→   170→    currentInvestigation?.status === 'completed' && !isRunning;
+   171→   171→
+   172→   172→  const handleSubmit = useCallback(async () => {
+   173→   173→    const query: Record<string, string> = { depth };
+   174→   174→    if (phone.trim()) query.phone = phone.trim();
+   175→   175→    if (email.trim()) query.email = email.trim();
+   176→   176→    if (name.trim()) query.name = name.trim();
+   177→   177→    if (business.trim()) query.business = business.trim();
+   178→   178→    if (country) query.country = country;
+   179→   179→    if (state.trim()) query.state = state.trim();
+   180→   180→    if (city.trim()) query.city = city.trim();
+   181→   181→    await startInvestigation(query);
+   182→   182→  }, [phone, email, name, business, country, state, city, depth, startInvestigation]);
+   183→   183→
+   184→   184→  const handleBatchUpload = useCallback(
+   185→   185→    (e: React.ChangeEvent<HTMLInputElement>) => {
+   186→   186→      const file = e.target.files?.[0];
+   187→   187→      if (file) {
+   188→   188→        startBatchInvestigation(file);
+   189→   189→        if (fileInputRef.current) fileInputRef.current.value = '';
+   190→   190→      }
+   191→   191→    },
+   192→   192→    [startBatchInvestigation],
+   193→   193→  );
+   194→   194→
+   195→   195→  const handleClear = useCallback(() => {
+   196→   196→    clearCurrent();
+   197→   197→    setPhone('');
+   198→   198→    setEmail('');
+   199→   199→    setName('');
+   200→   200→    setBusiness('');
+   201→   201→    setCountry('US');
+   202→   202→    setState('');
+   203→   203→    setCity('');
+   204→   204→    setDepth('standard');
+   205→   205→  }, [clearCurrent]);
+   206→   206→
+   207→   207→  // Derive location display
+   208→   208→  const locationLabel =
+   209→   209→    currentInvestigation?.locationStatus === 'live'
+   210→   210→      ? 'LIVE'
+   211→   211→      : currentInvestigation?.locationStatus === 'last_known'
+   212→   212→        ? 'LAST KNOWN'
+   213→   213→        : currentInvestigation?.locationStatus === 'historical'
+   214→   214→          ? 'HISTORICAL'
+   215→   215→          : 'UNAVAILABLE';
+   216→   216→
+   217→   217→  const locationColor =
+   218→   218→    currentInvestigation?.locationStatus === 'live'
+   219→   219→      ? '#22c55e'
+   220→   220→      : currentInvestigation?.locationStatus === 'last_known'
+   221→   221→        ? '#f59e0b'
+   222→   222→        : '#8a9a8a';
+   223→   223→
+   224→   224→  return (
+   225→   225→    <div className="flex flex-col gap-6 p-4 md:p-6 max-w-4xl mx-auto w-full">
+   226→   226→      {/* ========== FORM SECTION ========== */}
+   227→   227→      {!isCompleted && (
+   228→   228→        <>
+   229→   229→          {/* Header */}
+   230→   230→          <div className="flex items-center gap-3">
+   231→   231→            <Search className="w-5 h-5 text-[#f59e0b]" />
+   232→   232→            <div>
+   233→   233→              <h2 className="text-sm font-semibold text-[#e8e8e0] tracking-wide uppercase">
+   234→   234→                New Investigation
+   235→   235→              </h2>
+   236→   236→              <p className="tp-hud text-[0.65rem] mt-0.5">
+   237→   237→                Enter identifiers to begin OSINT analysis
+   238→   238→              </p>
+   239→   239→            </div>
+   240→   240→          </div>
+   241→   241→
+   242→   242→          <Separator className="bg-[#3a4a3a]" />
+   243→   243→
+   244→   244→          {/* Form panel */}
+   245→   245→          <div className="tp-panel rounded-sm p-5">
+   246→   246→            {/* Identifier inputs - 2 col on desktop */}
+   247→   247→            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+   248→   248→              {/* Phone */}
+   249→   249→              <div className="space-y-1.5">
+   250→   250→                <Label className="tp-hud flex items-center gap-1.5">
+   251→   251→                  <Phone className="w-3 h-3" />
+   252→   252→                  PHONE
+   253→   253→                </Label>
+   254→   254→                <Input
+   255→   255→                  placeholder="(555) 123-4567"
+   256→   256→                  value={phone}
+   257→   257→                  onChange={(e) => setPhone(e.target.value)}
+   258→   258→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] font-mono placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   259→   259→                />
+   260→   260→                {phone && (
+   261→   261→                  <p className="tp-hud text-[0.6rem]">
+   262→   262→                    E.164: <span className="tp-hud-value">{normalizePhone(phone)}</span>
+   263→   263→                  </p>
+   264→   264→                )}
+   265→   265→              </div>
+   266→   266→
+   267→   267→              {/* Email */}
+   268→   268→              <div className="space-y-1.5">
+   269→   269→                <Label className="tp-hud flex items-center gap-1.5">
+   270→   270→                  <Mail className="w-3 h-3" />
+   271→   271→                  EMAIL
+   272→   272→                </Label>
+   273→   273→                <Input
+   274→   274→                  type="email"
+   275→   275→                  placeholder="user@example.com"
+   276→   276→                  value={email}
+   277→   277→                  onChange={(e) => setEmail(e.target.value)}
+   278→   278→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] font-mono placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   279→   279→                />
+   280→   280→              </div>
+   281→   281→
+   282→   282→              {/* Name */}
+   283→   283→              <div className="space-y-1.5">
+   284→   284→                <Label className="tp-hud flex items-center gap-1.5">
+   285→   285→                  <User className="w-3 h-3" />
+   286→   286→                  NAME
+   287→   287→                </Label>
+   288→   288→                <Input
+   289→   289→                  placeholder="John Doe"
+   290→   290→                  value={name}
+   291→   291→                  onChange={(e) => setName(e.target.value)}
+   292→   292→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   293→   293→                />
+   294→   294→              </div>
+   295→   295→
+   296→   296→              {/* Business */}
+   297→   297→              <div className="space-y-1.5">
+   298→   298→                <Label className="tp-hud flex items-center gap-1.5">
+   299→   299→                  <Building2 className="w-3 h-3" />
+   300→   300→                  BUSINESS
+   301→   301→                </Label>
+   302→   302→                <Input
+   303→   303→                  placeholder="Acme Corp"
+   304→   304→                  value={business}
+   305→   305→                  onChange={(e) => setBusiness(e.target.value)}
+   306→   306→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   307→   307→                />
+   308→   308→              </div>
+   309→   309→            </div>
+   310→   310→
+   311→   311→            {/* Region section */}
+   312→   312→            <div className="mt-5">
+   313→   313→              <p className="tp-hud flex items-center gap-1.5 mb-3">
+   314→   314→                <MapPin className="w-3 h-3" />
+   315→   315→                REGION
+   316→   316→              </p>
+   317→   317→              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   318→   318→                <Select value={country} onValueChange={setCountry}>
+   319→   319→                  <SelectTrigger className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] h-9 text-sm font-mono">
+   320→   320→                    <SelectValue placeholder="Country" />
+   321→   321→                  </SelectTrigger>
+   322→   322→                  <SelectContent className="bg-[#1a201c] border-[#3a4a3a]">
+   323→   323→                    {COUNTRIES.map((c) => (
+   324→   324→                      <SelectItem
+   325→   325→                        key={c.value}
+   326→   326→                        value={c.value}
+   327→   327→                        className="text-[#e8e8e0] focus:bg-[#2a3322] focus:text-[#f59e0b]"
+   328→   328→                      >
+   329→   329→                        {c.label}
+   330→   330→                      </SelectItem>
+   331→   331→                    ))}
+   332→   332→                  </SelectContent>
+   333→   333→                </Select>
+   334→   334→
+   335→   335→                <Input
+   336→   336→                  placeholder="State / Province"
+   337→   337→                  value={state}
+   338→   338→                  onChange={(e) => setState(e.target.value)}
+   339→   339→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   340→   340→                />
+   341→   341→
+   342→   342→                <Input
+   343→   343→                  placeholder="City"
+   344→   344→                  value={city}
+   345→   345→                  onChange={(e) => setCity(e.target.value)}
+   346→   346→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   347→   347→                />
+   348→   348→              </div>
+   349→   349→            </div>
+   350→   350→
+   351→   351→            {/* Depth selector */}
+   352→   352→            <div className="mt-5">
+   353→   353→              <p className="tp-hud mb-3">INVESTIGATION DEPTH</p>
+   354→   354→              <div className="grid grid-cols-3 gap-3">
+   355→   355→                {DEPTH_OPTIONS.map((opt) => {
+   356→   356→                  const isActive = depth === opt.value;
+   357→   357→                  const Icon = opt.icon;
+   358→   358→                  return (
+   359→   359→                    <button
+   360→   360→                      key={opt.value}
+   361→   361→                      type="button"
+   362→   362→                      onClick={() => setDepth(opt.value)}
+   363→   363→                      className={`relative flex flex-col items-center gap-1.5 p-3 rounded-sm border transition-all duration-200 cursor-pointer ${
+   364→   364→                        isActive
+   365→   365→                          ? 'bg-[#2a3322] border-[#f59e0b] text-[#f59e0b]'
+   366→   366→                          : 'bg-[#121614] border-[#3a4a3a] text-[#8a9a8a] hover:border-[#5a6a5a] hover:text-[#e8e8e0]'
+   367→   367→                      }`}
+   368→   368→                    >
+   369→   369→                      <Icon className="w-4 h-4" />
+   370→   370→                      <span className="tp-hud text-[0.65rem]">{opt.label}</span>
+   371→   371→                      <span className="text-[0.6rem] opacity-60">{opt.desc}</span>
+   372→   372→                      {isActive && (
+   373→   373→                        <div className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-[#f59e0b]" />
+   374→   374→                      )}
+   375→   375→                    </button>
+   376→   376→                  );
+   377→   377→                })}
+   378→   378→              </div>
+   379→   379→            </div>
+   380→   380→
+   381→   381→            {/* Actions */}
+   382→   382→            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+   383→   383→              <Button
+   384→   384→                onClick={handleSubmit}
+   385→   385→                disabled={isRunning}
+   386→   386→                className="flex-1 sm:flex-none h-10 px-8 bg-[#f59e0b] text-[#121614] font-bold tracking-wider uppercase text-sm hover:bg-[#d97706] rounded-sm transition-colors cursor-pointer"
+   387→   387→              >
+   388→   388→                <Search className="w-4 h-4" />
+   389→   389→                {isRunning ? 'RUNNING...' : 'START INVESTIGATION'}
+   390→   390→              </Button>
+   391→   391→
+   392→   392→              <input
+   393→   393→                ref={fileInputRef}
+   394→   394→                type="file"
+   395→   395→                accept=".csv"
+   396→   396→                onChange={handleBatchUpload}
+   397→   397→                className="hidden"
+   398→   398→              />
+   399→   399→              <Button
+   400→   400→                variant="outline"
+   401→   401→                onClick={() => fileInputRef.current?.click()}
+   402→   402→                disabled={isRunning}
+   403→   403→                className="h-10 px-6 border-[#3a4a3a] text-[#8a9a8a] hover:border-[#5a6a5a] hover:text-[#e8e8e0] hover:bg-[#2a3322] rounded-sm uppercase text-xs tracking-wider transition-colors cursor-pointer"
+   404→   404→              >
+   405→   405→                <Upload className="w-3.5 h-3.5" />
+   406→   406→                Batch Upload
+   407→   407→              </Button>
+   408→   408→            </div>
+   409→   409→          </div>
+   410→   410→
+   411→   411→          {/* ========== PROGRESS SECTION ========== */}
+   412→   412→          {isRunning && progress && (
+   413→   413→            <div className="tp-panel rounded-sm p-5">
+   414→   414→              <div className="flex items-center justify-between mb-3">
+   415→   415→                <div className="flex items-center gap-2">
+   416→   416→                  <div className="w-2 h-2 rounded-full bg-[#f59e0b] tp-pulse" />
+   417→   417→                  <span className="tp-hud text-xs">INVESTIGATION IN PROGRESS</span>
+   418→   418→                </div>
+   419→   419→                <span className="tp-hud-value text-xs font-mono">
+   420→   420→                  {progress.progress}%
+   421→   421→                </span>
+   422→   422→              </div>
+   423→   423→
+   424→   424→              {/* Custom progress bar */}
+   425→   425→              <div className="tp-progress-track mb-3">
+   426→   426→                <div
+   427→   427→                  className="tp-progress-fill"
+   428→   428→                  style={{ width: `${progress.progress}%` }}
+   429→   429→                />
+   430→   430→              </div>
+   431→   431→
+   432→   432→              <div className="flex items-center gap-2">
+   433→   433→                <ChevronRight className="w-3 h-3 text-[#f59e0b]" />
+   434→   434→                <span className="text-sm text-[#e8e8e0]">{progress.message}</span>
+   435→   435→              </div>
+   436→   436→
+   437→   437→              <p className="tp-hud text-[0.6rem] mt-2 opacity-60">
+   438→   438→                Stage: <span className="uppercase">{progress.stage}</span>
+   439→   439→              </p>
+   440→   440→            </div>
+   441→   441→          )}
+   442→   442→        </>
+   443→   443→      )}
+   444→   444→
+   445→   445→      {/* ========== RESULTS SECTION ========== */}
+   446→   446→      {isCompleted && currentInvestigation && (
+   447→   447→        <>
+   448→   448→          {/* Demo watermark banner */}
+   449→   449→          {currentInvestigation.isDemoData && (
+   450→   450→            <div className="tp-demo-watermark tp-panel rounded-sm p-3 border-[#f59e0b]/30">
+   451→   451→              <div className="flex items-center gap-2">
+   452→   452→                <div className="w-2 h-2 rounded-full bg-[#f59e0b] tp-pulse" />
+   453→   453→                <span className="tp-hud text-xs text-[#f59e0b]">
+   454→   454→                  DEMO DATA — THIS INVESTIGATION USES SIMULATED RESULTS
+   455→   455→                </span>
+   456→   456→              </div>
+   457→   457→            </div>
+   458→   458→          )}
+   459→   459→
+   460→   460→          {/* Header */}
+   461→   461→          <div className="flex items-center justify-between">
+   462→   462→            <div className="flex items-center gap-3">
+   463→   463→              <CheckCircle2 className="w-5 h-5 text-[#22c55e]" />
+   464→   464→              <div>
+   465→   465→                <h2 className="text-sm font-semibold text-[#e8e8e0] tracking-wide uppercase">
+   466→   466→                  Investigation Complete
+   467→   467→                </h2>
+   468→   468→                <p className="tp-hud text-[0.65rem] mt-0.5">
+   469→   469→                  ID: {currentInvestigation.id} · Depth:{' '}
+   470→   470→                  <span className="tp-hud-value">
+   471→   471→                    {currentInvestigation.depth.toUpperCase()}
+   472→   472→                  </span>
+   473→   473→                </p>
+   474→   474→              </div>
+   475→   475→            </div>
+   476→   476→            <Button
+   477→   477→              variant="ghost"
+   478→   478→              onClick={handleClear}
+   479→   479→              className="text-[#8a9a8a] hover:text-[#e8e8e0] hover:bg-[#2a3322] text-xs uppercase tracking-wider h-8 cursor-pointer"
+   480→   480→            >
+   481→   481→              New Investigation
+   482→   482→            </Button>
+   483→   483→          </div>
+   484→   484→
+   485→   485→          <Separator className="bg-[#3a4a3a]" />
+   486→   486→
+   487→   487→          {/* Summary stats row */}
+   488→   488→          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   489→   489→            <StatCard
+   490→   490→              icon={User}
+   491→   491→              label="Identities"
+   492→   492→              value={currentInvestigation.identityCount}
+   493→   493→              color="#f59e0b"
+   494→   494→            />
+   495→   495→            <StatCard
+   496→   496→              icon={FileText}
+   497→   497→              label="Evidence"
+   498→   498→              value={currentInvestigation.evidenceCount}
+   499→   499→              color="#22c55e"
+   500→   500→            />
+   501→   501→            <StatCard
+   502→   502→              icon={Database}
+   503→   503→              label="Sources"
+   504→   504→              value={currentInvestigation.sourceCount}
+   505→   505→              color="#3b82f6"
+   506→   506→            />
+   507→   507→            <StatCard
+   508→   508→              icon={
+   509→   509→                currentInvestigation.hasConflicts ? AlertTriangle : CheckCircle2
+   510→   510→              }
+   511→   511→              label="Conflicts"
+   512→   512→              value={currentInvestigation.hasConflicts ? 'YES' : 'NONE'}
+   513→   513→              color={currentInvestigation.hasConflicts ? '#ef4444' : '#22c55e'}
+   514→   514→            />
+   515→   515→          </div>
+   516→   516→
+   517→   517→          {/* Confidence + AI Assessment row */}
+   518→   518→          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   519→   519→            {/* Confidence panel */}
+   520→   520→            <div className="tp-bracket-card tp-panel rounded-sm p-5">
+   521→   521→              <p className="tp-hud text-xs mb-4">CONFIDENCE SCORE</p>
+   522→   522→              <div className="flex items-center gap-5">
+   523→   523→                <ConfidenceMeter
+   524→   524→                  score={currentInvestigation.confidence ?? 0}
+   525→   525→                />
+   526→   526→                <div className="flex flex-col gap-2">
+   527→   527→                  <div className="flex items-center gap-2">
+   528→   528→                    <div
+   529→   529→                      className="w-2 h-2 rounded-full"
+   530→   530→                      style={{
+   531→   531→                        backgroundColor:
+   532→   532→                          (currentInvestigation.confidence ?? 0) >= 80
+   533→   533→                            ? '#22c55e'
+   534→   534→                            : (currentInvestigation.confidence ?? 0) >= 50
+   535→   535→                              ? '#f59e0b'
+   536→   536→                              : '#ef4444',
+   537→   537→                      }}
+   538→   538→                    />
+   539→   539→                    <span
+   540→   540→                      className="tp-hud-value text-xs font-bold uppercase"
+   541→   541→                      style={{
+   542→   542→                        color:
+   543→   543→                          (currentInvestigation.confidence ?? 0) >= 80
+   544→   544→                            ? '#22c55e'
+   545→   545→                            : (currentInvestigation.confidence ?? 0) >= 50
+   546→   546→                              ? '#f59e0b'
+   547→   547→                              : '#ef4444',
+   548→   548→                      }}
+   549→   549→                    >
+   550→   550→                      {(currentInvestigation.confidence ?? 0) >= 80
+   551→   551→                        ? 'HIGH'
+   552→   552→                        : (currentInvestigation.confidence ?? 0) >= 50
+   553→   553→                          ? 'MODERATE'
+   554→   554→                          : 'LOW'}
+   555→   555→                    </span>
+   556→   556→                  </div>
+   557→   557→
+   558→   558→                  {/* Location status */}
+   559→   559→                  <div className="flex items-center gap-2 mt-1">
+   560→   560→                    <MapPin
+   561→   561→                      className="w-3 h-3"
+   562→   562→                      style={{ color: locationColor }}
+   563→   563→                    />
+   564→   564→                    <span
+   565→   565→                      className="tp-hud text-[0.65rem]"
+   566→   566→                      style={{ color: locationColor }}
+   567→   567→                    >
+   568→   568→                      LOCATION: {locationLabel}
+   569→   569→                    </span>
+   570→   570→                  </div>
+   571→   571→
+   572→   572→                  {currentInvestigation.hasConflicts && (
+   573→   573→                    <div className="flex items-center gap-1.5 mt-1">
+   574→   574→                      <AlertTriangle className="w-3 h-3 text-[#ef4444]" />
+   575→   575→                      <span className="text-[0.65rem] text-[#ef4444] font-mono">
+   576→   576→                        CONFLICTING EVIDENCE DETECTED
+   577→   577→                      </span>
+   578→   578→                    </div>
+   579→   579→                  )}
+   580→   580→                </div>
+   581→   581→              </div>
+   582→   582→            </div>
+   583→   583→
+   584→   584→            {/* AI Assessment panel */}
+   585→   585→            {aiAssessment && (
+   586→   586→              <div className="tp-bracket-card tp-panel rounded-sm p-5">
+   587→   587→                <p className="tp-hud text-xs mb-3">AI ASSESSMENT</p>
+   588→   588→
+   589→   589→                <p className="text-sm text-[#e8e8e0] leading-relaxed mb-3">
+   590→   590→                  {aiAssessment.summary}
+   591→   591→                </p>
+   592→   592→
+   593→   593→                <div
+   594→   594→                  className={`text-xs font-mono p-2.5 rounded-sm mb-3 border ${
+   595→   595→                    (currentInvestigation.confidence ?? 0) >= 80
+   596→   596→                      ? 'bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e]'
+   597→   597→                      : (currentInvestigation.confidence ?? 0) >= 50
+   598→   598→                        ? 'bg-[#f59e0b]/10 border-[#f59e0b]/30 text-[#f59e0b]'
+   599→   599→                        : 'bg-[#ef4444]/10 border-[#ef4444]/30 text-[#ef4444]'
+   600→   600→                  }`}
+   601→   601→                >
+   602→   602→                  {aiAssessment.conclusion}
+   603→   603→                </div>
+   604→   604→
+   605→   605→                {aiAssessment.recommendations.length > 0 && (
+   606→   606→                  <div className="space-y-1">
+   607→   607→                    <p className="tp-hud text-[0.6rem]">RECOMMENDATIONS</p>
+   608→   608→                    {aiAssessment.recommendations.map((rec, i) => (
+   609→   609→                      <div key={i} className="flex items-start gap-1.5">
+   610→   610→                        <ChevronRight className="w-3 h-3 text-[#f59e0b] mt-0.5 shrink-0" />
+   611→   611→                        <span className="text-xs text-[#8a9a8a]">{rec}</span>
+   612→   612→                      </div>
+   613→   613→                    ))}
+   614→   614→                  </div>
+   615→   615→                )}
+   616→   616→
+   617→   617→                {aiAssessment.missingEvidence.length > 0 && (
+   618→   618→                  <div className="mt-3 space-y-1">
+   619→   619→                    <p className="tp-hud text-[0.6rem]">MISSING EVIDENCE</p>
+   620→   620→                    {aiAssessment.missingEvidence.map((me, i) => (
+   621→   621→                      <div key={i} className="flex items-start gap-1.5">
+   622→   622→                        <div className="w-1 h-1 rounded-full bg-[#8a9a8a] mt-1.5 shrink-0" />
+   623→   623→                        <span className="text-xs text-[#5a6a5a]">{me}</span>
+   624→   624→                      </div>
+   625→   625→                    ))}
+   626→   626→                  </div>
+   627→   627→                )}
+   628→   628→              </div>
+   629→   629→            )}
+   630→   630→          </div>
+   631→   631→
+   632→   632→          {/* Investigation metadata */}
+   633→   633→          <div className="tp-panel rounded-sm p-4">
+   634→   634→            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   635→   635→              <div>
+   636→   636→                <p className="tp-hud text-[0.6rem]">INPUT IDENTIFIERS</p>
+   637→   637→                <div className="mt-1 flex flex-wrap gap-1">
+   638→   638→                  {currentInvestigation.inputPhone && (
+   639→   639→                    <Badge
+   640→   640→                      variant="outline"
+   641→   641→                      className="tp-source-tag border-[#3a4a3a] text-[0.65rem]"
+   642→   642→                    >
+   643→   643→                      <Phone className="w-2.5 h-2.5 mr-1" />
+   644→   644→                      {currentInvestigation.inputPhone}
+   645→   645→                    </Badge>
+   646→   646→                  )}
+   647→   647→                  {currentInvestigation.inputEmail && (
+   648→   648→                    <Badge
+   649→   649→                      variant="outline"
+   650→   650→                      className="tp-source-tag border-[#3a4a3a] text-[0.65rem]"
+   651→   651→                    >
+   652→   652→                      <Mail className="w-2.5 h-2.5 mr-1" />
+   653→   653→                      {currentInvestigation.inputEmail}
+   654→   654→                    </Badge>
+   655→   655→                  )}
+   656→   656→                  {currentInvestigation.inputName && (
+   657→   657→                    <Badge
+   658→   658→                      variant="outline"
+   659→   659→                      className="tp-source-tag border-[#3a4a3a] text-[0.65rem]"
+   660→   660→                    >
+   661→   661→                      <User className="w-2.5 h-2.5 mr-1" />
+   662→   662→                      {currentInvestigation.inputName}
+   663→   663→                    </Badge>
+   664→   664→                  )}
+   665→   665→                </div>
+   666→   666→              </div>
+   667→   667→              <div>
+   668→   668→                <p className="tp-hud text-[0.6rem]">REGION</p>
+   669→   669→                <p className="tp-hud-value text-xs mt-1">
+   670→   670→                  {[currentInvestigation.inputCity, currentInvestigation.inputState, currentInvestigation.inputCountry]
+   671→   671→                    .filter(Boolean)
+   672→   672→                    .join(', ') || '—'}
+   673→   673→                </p>
+   674→   674→              </div>
+   675→   675→              <div>
+   676→   676→                <p className="tp-hud text-[0.6rem]">DURATION</p>
+   677→   677→                <p className="tp-hud-value text-xs mt-1 flex items-center gap-1">
+   678→   678→                  <Clock className="w-3 h-3" />
+   679→   679→                  {currentInvestigation.startedAt && currentInvestigation.completedAt
+   680→   680→                    ? `${Math.round((new Date(currentInvestigation.completedAt).getTime() - new Date(currentInvestigation.startedAt).getTime()) / 1000)}s`
+   681→   681→                    : '—'}
+   682→   682→                </p>
+   683→   683→              </div>
+   684→   684→              <div>
+   685→   685→                <p className="tp-hud text-[0.6rem]">DEPTH</p>
+   686→   686→                <p className="tp-hud-value text-xs mt-1 uppercase">
+   687→   687→                  {currentInvestigation.depth}
+   688→   688→                </p>
+   689→   689→              </div>
+   690→   690→            </div>
+   691→   691→          </div>
+   692→   692→
+   693→   693→          {/* View full report button */}
+   694→   694→          <Button
+   695→   695→            onClick={() => {
+   696→   696→              // Navigate would be handled by the nav store in real integration
+   697→   697→              // For now, the component signals navigation intent
+   698→   698→              window.dispatchEvent(
+   699→   699→                new CustomEvent('tp-navigate', {
+   700→   700→                  detail: { view: 'investigation-detail', id: currentInvestigation.id },
+   701→   701→                }),
+   702→   702→              );
+   703→   703→            }}
+   704→   704→            className="w-full h-11 bg-[#f59e0b] text-[#121614] font-bold tracking-wider uppercase text-sm hover:bg-[#d97706] rounded-sm transition-colors cursor-pointer"
+   705→   705→          >
+   706→   706→            <Eye className="w-4 h-4" />
+   707→   707→            View Full Report
+   708→   708→            <ChevronRight className="w-4 h-4 ml-auto" />
+   709→   709→          </Button>
+   710→   710→        </>
+   711→   711→      )}
+   712→   712→    </div>
+   713→   713→  );
+   714→   714→}
+   715→   715→
