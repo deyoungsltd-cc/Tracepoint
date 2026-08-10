@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useNavStore, useAuthStore } from '@/lib/store/app';
 import type { AppView } from '@/lib/types';
@@ -31,10 +32,19 @@ const adminNav: NavItem[] = [
 export function Sidebar() {
   const { currentView, sidebarOpen, navigate, toggleSidebar } = useNavStore();
   const user = useAuthStore((s) => s.user);
+  const router = useRouter();
 
   if (!user) return null;
 
   const items = user.role === 'admin' ? [...userNav, ...adminNav] : userNav;
+
+  const handleNavClick = (view: AppView) => {
+    if (view === 'admin') {
+      router.push('/admin');
+    } else {
+      navigate(view);
+    }
+  };
 
   return (
     <aside
@@ -61,7 +71,7 @@ export function Sidebar() {
           return (
             <button
               key={item.view}
-              onClick={() => navigate(item.view)}
+              onClick={() => handleNavClick(item.view)}
               className={cn(
                 'w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-[13px] transition-colors',
                 isActive

@@ -11,7 +11,7 @@ const InvestigationWorkspace = lazy(() => import('@/components/tracepoint/invest
 const InvestigationDetail = lazy(() => import('@/components/tracepoint/investigation/InvestigationDetail'));
 const HistoryView = lazy(() => import('@/components/tracepoint/layout/HistoryView'));
 const DevicesView = lazy(() => import('@/components/tracepoint/layout/DevicesView'));
-const AdminView = lazy(() => import('@/components/tracepoint/admin/AdminView'));
+// Admin is now a separate route at /admin — no longer embedded in the main page
 const SettingsView = lazy(() => import('@/components/tracepoint/layout/SettingsView'));
 const ReportsView = lazy(() => import('@/components/tracepoint/layout/ReportsView'));
 
@@ -20,15 +20,6 @@ function Loading({ name }: { name: string }) {
     <div className="flex-1 flex items-center justify-center">
       <div className="w-5 h-5 border-2 border-[#c8a24e]/20 border-t-[#c8a24e] rounded-full animate-spin" />
     </div>
-  );
-}
-
-// Admin has its own layout — no shared sidebar/header
-function AdminShell() {
-  return (
-    <Suspense fallback={<Loading name="Admin" />}>
-      <AdminView />
-    </Suspense>
   );
 }
 
@@ -67,11 +58,6 @@ function AppContent() {
         <AuthView />
       </Suspense>
     );
-  }
-
-  // Admin gets completely separate layout
-  if (currentView === 'admin') {
-    return <AdminShell />;
   }
 
   return <AppShell />;

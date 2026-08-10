@@ -57,28 +57,31 @@ export default function SettingsView() {
         {/* API Keys */}
         <div className="surface p-4 space-y-3.5">
           <h3 className="text-xs font-medium text-foreground">API Keys</h3>
-          <p className="text-[11px] text-muted-foreground">Keys are stored in your browser only. They never leave your machine.</p>
+          <p className="text-[11px] text-muted-foreground">Keys are pre-configured. Override here if needed.</p>
 
           <div className="space-y-3">
             {/* OpenAI */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs text-foreground">OpenAI</label>
-                {settings.aiApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : null}
+                <label className="text-xs text-foreground">OpenAI (AI Assessments)</label>
+                {settings.aiApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : <XCircle className="w-3 h-3 text-[#c44040]" />}
               </div>
               <Input
                 type="password"
                 value={settings.aiApiKey}
                 onChange={(e) => updateSettings({ aiApiKey: e.target.value })}
-                placeholder="sk-..."
+                placeholder="sk-proj-..."
                 className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
               />
-              <p className="text-[10px] text-muted-foreground">Powers AI assessments. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">platform.openai.com/api-keys</a></p>
+              <p className="text-[10px] text-muted-foreground">Powers AI identity analysis via GPT-4o. <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">Get key</a></p>
             </div>
 
             {/* Serper.dev */}
             <div className="space-y-1">
-              <label className="text-xs text-foreground">Serper.dev (Web Search)</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-foreground">Serper.dev (Web Search)</label>
+                {settings.serperApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : <XCircle className="w-3 h-3 text-[#c44040]" />}
+              </div>
               <Input
                 type="password"
                 value={settings.serperApiKey || ''}
@@ -86,12 +89,15 @@ export default function SettingsView() {
                 placeholder="API key"
                 className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
               />
-              <p className="text-[10px] text-muted-foreground">Public source discovery. Free tier: 2,500 searches/month. <a href="https://serper.dev" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">serper.dev</a></p>
+              <p className="text-[10px] text-muted-foreground">OSINT web search. Free: 2,500/mo. <a href="https://serper.dev" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">Get key</a></p>
             </div>
 
             {/* NumVerify */}
             <div className="space-y-1">
-              <label className="text-xs text-foreground">NumVerify (Phone Validation)</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-foreground">NumVerify (Phone Validation)</label>
+                {settings.numverifyApiKey ? <CheckCircle className="w-3 h-3 text-[#4a9e5a]" /> : <XCircle className="w-3 h-3 text-[#c44040]" />}
+              </div>
               <Input
                 type="password"
                 value={settings.numverifyApiKey || ''}
@@ -99,20 +105,7 @@ export default function SettingsView() {
                 placeholder="API key"
                 className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
               />
-              <p className="text-[10px] text-muted-foreground">Phone validation + carrier lookup. Free: 100/month. <a href="https://numverify.com" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">numverify.com</a></p>
-            </div>
-
-            {/* Mapbox */}
-            <div className="space-y-1">
-              <label className="text-xs text-foreground">Mapbox (2D Maps)</label>
-              <Input
-                type="password"
-                value={settings.mapboxToken}
-                onChange={(e) => updateSettings({ mapboxToken: e.target.value })}
-                placeholder="pk.eyJ1..."
-                className="bg-accent border-border text-foreground placeholder:text-muted-foreground/40 h-8 text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">2D map rendering. Free: 100K loads/month. <a href="https://account.mapbox.com/access-tokens" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">account.mapbox.com</a></p>
+              <p className="text-[10px] text-muted-foreground">Phone validation + carrier lookup. Free: 100/mo. <a href="https://numverify.com" target="_blank" rel="noopener" className="text-[#c8a24e] hover:underline">Get key</a></p>
             </div>
           </div>
         </div>

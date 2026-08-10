@@ -15,6 +15,9 @@ import type {
   FeatureFlag,
   AIAssessment,
 } from '@/lib/types';
+import { runRealInvestigation } from '@/lib/api/pipeline';
+import { saveInvestigation } from '@/lib/supabase/data';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 // --- Auth Store ---
 interface AuthStore {
@@ -189,74 +192,25 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
 
   startInvestigation: async (query: Record<string, string>) => {
     set({ isRunning: true, progress: { stage: 'initializing', progress: 0, message: 'Initializing investigation...', timestamp: new Date().toISOString() } });
-
-    const stages: Array<{ stage: string; message: string; progress: number }> = [
-      { stage: 'normalizing', message: 'Normalizing identifiers...', progress: 10 },
-      { stage: 'discovery', message: 'Discovering public sources...', progress: 25 },
-      { stage: 'searching', message: 'Searching public records...', progress: 40 },
-      { stage: 'correlating', message: 'Correlating identities...', progress: 55 },
-      { stage: 'evidence', message: 'Collecting and scoring evidence...', progress: 70 },
-      { stage: 'location', message: 'Querying location providers...', progress: 82 },
-      { stage: 'confidence', message: 'Calculating confidence scores...', progress: 90 },
-      { stage: 'completing', message: 'Generating report...', progress: 95 },
-    ];
-
-    for (const s of stages) {
-      await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
-      set({ progress: { stage: s.stage, progress: s.progress, message: s.message, timestamp: new Date().toISOString() } });
+    try {
+      const numverifyKey = process.env.NEXT_PUBLIC_NUMVERIFY_KEY || useSettingsStore.getState().settings.numverifyApiKey || '';
+      const serperKey = process.env.NEXT_PUBLIC_SERPER_KEY || useSettingsStore.getState().settings.serperApiKey || '';
+      const openAiKey = process.env.NEXT_PUBLIC_OPENAI_KEY || useSettingsStore.getState().settings.aiApiKey || '';
+      const hasRealKeys = !!(numverifyKey || serperKey);
+      if (hasRealKeys) {
+        const { investigation, aiAssessment } = await runRealInvestigation(
+          { phone: query.phone || undefined, phoneNormalized: query.phoneNormalized || undefined, email: query.email || undefined, country: query.country || undefined, depth: (query.depth as 'quick' | 'standard' | 'deep') || 'standard', numverifyKey, serperKey, openAiKey },
+          { onProgress: (stage, message, progress) => { set({ progress: { stage, progress, message, timestamp: new Date().toISOString() } }); } },
+        );
+        if (isSupabaseConfigured() && !investigation.isDemoData) { saveInvestigation(investigation).catch(() => {}); }
+        set((state) => ({ investigations: [investigation, ...state.investigations], currentInvestigation: investigation, isRunning: false, progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: new Date().toISOString() }, aiAssessment }));
+      } else {
+        await runDemoPipeline(query, set);
+      }
+    } catch (err) {
+      console.error('Investigation error:', err);
+      set({ isRunning: false, progress: { stage: 'failed', progress: 0, message: 'Investigation failed. Try again.', timestamp: new Date().toISOString() } });
     }
-
-    // Generate demo investigation result
-    const now = new Date().toISOString();
-    const phone = query.phone || '';
-    const name = query.name || 'Unknown';
-    const country = query.country || 'US';
-
-    const demoInvestigation: Investigation = {
-      id: `inv-${Date.now()}`,
-      status: 'completed',
-      depth: (query.depth as Investigation['depth']) || 'standard',
-      isBatch: false,
-      batchId: null,
-      inputPhone: phone,
-      inputPhoneNormalized: phone.startsWith('+') ? phone : `+1${phone.replace(/[^0-9]/g, '')}`,
-      inputEmail: query.email || null,
-      inputName: name,
-      inputBusiness: query.business || null,
-      inputRegion: query.region || null,
-      inputCountry: country,
-      inputState: query.state || null,
-      inputCity: query.city || null,
-      summary: `Investigation completed for ${name || phone || 'unknown identifier'}. ${Math.floor(Math.random() * 3) + 1} identity candidates found with varying confidence levels.`,
-      identityCount: Math.floor(Math.random() * 3) + 1,
-      evidenceCount: Math.floor(Math.random() * 8) + 5,
-      sourceCount: Math.floor(Math.random() * 6) + 4,
-      confidence: 78,
-      hasConflicts: Math.random() > 0.6,
-      locationStatus: 'unavailable',
-      isDemoData: true,
-      startedAt: new Date(Date.now() - 30000).toISOString(),
-      completedAt: now,
-      createdAt: new Date(Date.now() - 35000).toISOString(),
-      updatedAt: now,
-      candidates: [],
-      evidence: [],
-      locations: [],
-      timeline: [],
-    };
-
-    // Populate with demo data
-    demoInvestigation.candidates = generateDemoCandidates(demoInvestigation.id);
-    demoInvestigation.evidence = generateDemoEvidence(demoInvestigation.id);
-    demoInvestigation.timeline = generateDemoTimeline(demoInvestigation.id);
-
-    set((state) => ({
-      investigations: [demoInvestigation, ...state.investigations],
-      currentInvestigation: demoInvestigation,
-      isRunning: false,
-      progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: now },
-      aiAssessment: generateDemoAIAssessment(demoInvestigation),
-    }));
   },
 
   startBatchInvestigation: async (_file: File) => {
@@ -354,7 +308,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     serperApiKey: '',
     numverifyApiKey: '',
     mapboxToken: '',
-    demoMode: true,
+    demoMode: false,
     batchMaxSize: 10,
     historicalLocationCount: 5,
     locationFreshnessThresholds: {
@@ -417,6 +371,57 @@ export const useGlobeStore = create<GlobeStore>((set) => ({
   focusLocation: (lat, lng) => set({ focusedLocation: { lat, lng } }),
   clearFocus: () => set({ focusedLocation: null }),
 }));
+
+// Demo pipeline fallback when no API keys are configured
+async function runDemoPipeline(query: Record<string, string>, set: (fn: (state: any) => any) => void) {
+  const stages: Array<{ stage: string; message: string; progress: number }> = [
+    { stage: 'normalizing', message: 'Normalizing identifiers...', progress: 10 },
+    { stage: 'discovery', message: 'Discovering public sources...', progress: 25 },
+    { stage: 'searching', message: 'Searching public records...', progress: 40 },
+    { stage: 'correlating', message: 'Correlating identities...', progress: 55 },
+    { stage: 'evidence', message: 'Collecting and scoring evidence...', progress: 70 },
+    { stage: 'confidence', message: 'Calculating confidence scores...', progress: 90 },
+    { stage: 'completing', message: 'Generating report...', progress: 95 },
+  ];
+  for (const s of stages) {
+    await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
+    set({ progress: { stage: s.stage, progress: s.progress, message: s.message, timestamp: new Date().toISOString() } });
+  }
+  const now = new Date().toISOString();
+  const phone = query.phone || '';
+  const name = query.name || 'Unknown';
+  const country = query.country || 'US';
+  const demoInvestigation: Investigation = {
+    id: `inv-${Date.now()}`,
+    status: 'completed',
+    depth: (query.depth as Investigation['depth']) || 'standard',
+    isBatch: false, batchId: null,
+    inputPhone: phone,
+    inputPhoneNormalized: phone.startsWith('+') ? phone : `+1${phone.replace(/[^0-9]/g, '')}`,
+    inputEmail: query.email || null,
+    inputName: name, inputBusiness: null, inputRegion: null,
+    inputCountry: country, inputState: null, inputCity: null,
+    summary: `Investigation completed for ${name || phone || 'unknown identifier'}. ${Math.floor(Math.random() * 3) + 1} identity candidates found with varying confidence levels.`,
+    identityCount: Math.floor(Math.random() * 3) + 1,
+    evidenceCount: Math.floor(Math.random() * 8) + 5,
+    sourceCount: Math.floor(Math.random() * 6) + 4,
+    confidence: 78, hasConflicts: Math.random() > 0.6,
+    locationStatus: 'unavailable', isDemoData: true,
+    startedAt: new Date(Date.now() - 30000).toISOString(),
+    completedAt: now, createdAt: new Date(Date.now() - 35000).toISOString(), updatedAt: now,
+    candidates: [], evidence: [], locations: [], timeline: [],
+  };
+  demoInvestigation.candidates = generateDemoCandidates(demoInvestigation.id);
+  demoInvestigation.evidence = generateDemoEvidence(demoInvestigation.id);
+  demoInvestigation.timeline = generateDemoTimeline(demoInvestigation.id);
+  set((state: any) => ({
+    investigations: [demoInvestigation, ...state.investigations],
+    currentInvestigation: demoInvestigation,
+    isRunning: false,
+    progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: now },
+    aiAssessment: generateDemoAIAssessment(demoInvestigation),
+  }));
+}
 
 // ============================================================
 // DEMO DATA GENERATORS

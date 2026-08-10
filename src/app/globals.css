@@ -180,3 +180,11 @@
 .admin-text { color: #1a1a1a; }
 .admin-text-dim { color: #6b6b6b; }
 .admin-border { border-color: #d4d4d0; }
+
+/* Leaflet map marker override */
+.tp-map-marker { background: none !important; border: none !important; }
+.leaflet-container { background: #0f1110 !important; font-family: var(--font-geist-mono), monospace; }
+.leaflet-control-zoom a { background: #181b19 !important; color: #d4d4cc !important; border-color: #2a2e2a !important; }
+.leaflet-control-zoom a:hover { background: #252925 !important; }
+.leaflet-popup-content-wrapper { background: #181b19; color: #d4d4cc; border: 1px solid #2a2e2a; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+.leaflet-popup-tip { background: #181b19; border: 1px solid #2a2e2a; }

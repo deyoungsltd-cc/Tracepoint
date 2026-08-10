@@ -1,18 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore, useNavStore } from '@/lib/store/app';
 import { Radar, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
+import { getProfile } from '@/lib/supabase/data';
 
 export default function AuthView() {
-  const { login, setDemoMode, isLoading } = useAuthStore();
+  const { setDemoMode, isLoading } = useAuthStore();
   const { navigate } = useNavStore();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+
+  // Check for existing Supabase session on mount
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) restoreSession(session.user);
+    });
+    // Listen for auth changes (Google OAuth redirect)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) restoreSession(session.user);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const restoreSession = async (user: any) => {
+    const profile = await getProfile();
+    useAuthStore.setState({
+      user: {
+        id: user.id,
+        email: user.email || '',
+        displayName: profile?.display_name || user.user_metadata?.full_name || user.user_metadata?.display_name || null,
+        role: profile?.role || 'standard',
+        mfaEnabled: false,
+        emailVerified: !!user.email_confirmed_at,
+        isDemo: false,
+        createdAt: user.created_at,
+      },
+      isAuthenticated: true,
+    });
+    navigate('dashboard');
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,24 +62,8 @@ export default function AuthView() {
         const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) throw authError;
         if (data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('display_name, role')
-            .eq('id', data.user.id)
-            .single();
-          useAuthStore.setState({
-            user: {
-              id: data.user.id,
-              email: data.user.email || email,
-              displayName: profile?.display_name || data.user.user_metadata?.display_name || null,
-              role: (profile?.role as any) || 'standard',
-              mfaEnabled: false,
-              emailVerified: data.user.email_confirmed_at ? true : false,
-              isDemo: false,
-              createdAt: data.user.created_at,
-            },
-            isAuthenticated: true,
-          });
+          await restoreSession(data.user);
+          return;
         }
       } else {
         const { data, error: authError } = await supabase.auth.signUp({
@@ -57,19 +73,8 @@ export default function AuthView() {
         });
         if (authError) throw authError;
         if (data.user) {
-          useAuthStore.setState({
-            user: {
-              id: data.user.id,
-              email: data.user.email || email,
-              displayName: data.user.user_metadata?.display_name || null,
-              role: 'standard',
-              mfaEnabled: false,
-              emailVerified: false,
-              isDemo: false,
-              createdAt: data.user.created_at,
-            },
-            isAuthenticated: true,
-          });
+          await restoreSession(data.user);
+          return;
         }
       }
       navigate('dashboard');
@@ -86,7 +91,7 @@ export default function AuthView() {
     try {
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: `${window.location.origin}/` },
       });
       if (authError) throw authError;
     } catch (err: any) {

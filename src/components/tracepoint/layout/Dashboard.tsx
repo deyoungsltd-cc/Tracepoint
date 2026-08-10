@@ -1,11 +1,31 @@
 'use client';
 
-import { useEffect, Suspense } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { useNavStore, useInvestigationStore, useGlobeStore, useAdminStore } from '@/lib/store/app';
-import { GlobeView } from '@/components/tracepoint/globe/GlobeView';
 import { Crosshair, Clock, Activity, Globe2, MapPin, BarChart3 } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { listInvestigations } from '@/lib/supabase/data';
+import dynamic from 'next/dynamic';
+
+const GlobeView = dynamic(() => import('@/components/tracepoint/globe/GlobeView').then(m => ({ default: m.GlobeView })), { ssr: false });
+const LeafletMap = dynamic(() => import('@/components/tracepoint/globe/LeafletMap'), { ssr: false });
+
+class GlobeErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) return <MapFallback />;
+    return this.props.children;
+  }
+}
+
+function MapFallback() {
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at center, #161a18 0%, #0f1110 70%)' }}>
+      <LeafletMap markers={useGlobeStore.getState().markers} className="" />
+    </div>
+  );
+}
 
 function DashboardContent() {
   const nav = useNavStore();
@@ -109,23 +129,45 @@ function DashboardContent() {
       {/* Center: Globe */}
       <div style={{ flex: 1, minHeight: 350 }} className="lg:min-h-0">
         <div className="globe-bg" style={{ width: '100%', height: '100%', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden', position: 'relative' }}>
-          {viewMode === 'globe' && (
-            <Suspense fallback={
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <Globe2 style={{ width: 24, height: 24, color: '#c8a24e', margin: '0 auto 8px' }} className="animate-pulse" />
-                  <div className="mono-label" style={{ fontSize: 10 }}>Loading globe...</div>
+          {viewMode === 'globe' && (            <GlobeErrorBoundary>              <Suspense fallback={
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Globe2 style={{ width: 24, height: 24, color: '#c8a24e', margin: '0 auto 8px' }} className="animate-pulse" />
+                    <div className="mono-label" style={{ fontSize: 10 }}>Loading globe...</div>
+                  </div>
                 </div>
-              </div>
-            }>
-              <GlobeView />
-            </Suspense>
+              }>
+                <GlobeView />
+              </Suspense>
+            </GlobeErrorBoundary>
           )}
-          {viewMode !== 'globe' && (
+          {viewMode === 'map2d' && (
+            <LeafletMap markers={markers} />
+          )}
+          {viewMode === 'list' && (
+            <div style={{ width: '100%', height: '100%', overflow: 'auto', padding: 16 }}>
+              {markers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#707870', fontSize: 12 }}>No markers to display</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {markers.map((m) => (
+                    <div key={m.id} className="surface" style={{ padding: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: 12 }}>{m.label}</div>
+                        <div style={{ fontSize: 10, color: '#707870', fontFamily: 'monospace' }}>{m.lat.toFixed(4)}, {m.lng.toFixed(4)}</div>
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: 'monospace', color: m.confidence >= 80 ? '#4a9e5a' : '#c8a24e' }}>{m.confidence}%</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {viewMode === 'evidence' && (
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ textAlign: 'center' }}>
                 <BarChart3 style={{ width: 32, height: 32, color: 'rgba(112,120,112,0.15)', margin: '0 auto 8px' }} />
-                <p style={{ fontSize: 12, color: '#707870' }}>{viewMode === 'map2d' ? '2D Map' : viewMode === 'list' ? 'List View' : 'Evidence View'}</p>
+                <p style={{ fontSize: 12, color: '#707870' }}>Evidence matrix — run an investigation to populate</p>
               </div>
             </div>
           )}

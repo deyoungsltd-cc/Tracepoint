@@ -11,6 +11,7 @@ alter default privileges in schema public grant all on tables to postgres, anon,
 -- ============================================================
 create table public.profiles (
   id uuid references auth.users(id) on delete cascade primary key,
+  email text,
   display_name text,
   role text not null default 'standard' check (role in ('admin', 'pro', 'standard')),
   created_at timestamptz not null default now(),
