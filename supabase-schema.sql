@@ -1,75 +1,67 @@
 -- ============================================================
 -- TRACEPOINT — Supabase Database Schema
--- Run this in the Supabase SQL Editor
+-- Run this in the Supabase SQL Editor (Dashboard > SQL Editor)
 -- ============================================================
-
--- Enable Row Level Security
-alter default privileges in schema public grant all on tables to postgres, anon, authenticated, service_role;
 
 -- ============================================================
 -- PROFILES (extends Supabase auth.users)
 -- ============================================================
-create table public.profiles (
-  id uuid references auth.users(id) on delete cascade primary key,
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email text,
   display_name text,
-  role text not null default 'standard' check (role in ('admin', 'pro', 'standard')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  role text NOT NULL DEFAULT 'standard' CHECK (role IN ('admin', 'pro', 'standard')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-alter table public.profiles enable row level security;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view own profile"
-  on public.profiles for select
-  using (auth.uid() = id);
-
-create policy "Users can update own profile"
-  on public.profiles for update
-  using (auth.uid() = id);
-
-create policy "Admins can view all profiles"
-  on public.profiles for select
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Auto-create profile on signup
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer set search_path = ''
-as $$
-begin
-  insert into public.profiles (id, display_name, role)
-  values (
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, display_name, role)
+  VALUES (
     new.id,
-    coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
     'standard'
   );
-  return new;
-end;
+  RETURN new;
+END;
 $$;
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
 -- ============================================================
 -- INVESTIGATIONS
 -- ============================================================
-create table public.investigations (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  status text not null default 'pending' check (status in ('pending', 'running', 'completed', 'failed', 'archived')),
-  depth text not null default 'standard' check (depth in ('quick', 'standard', 'deep')),
-  is_batch boolean not null default false,
+CREATE TABLE IF NOT EXISTS public.investigations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'archived')),
+  depth text NOT NULL DEFAULT 'standard' CHECK (depth IN ('quick', 'standard', 'deep')),
+  is_batch boolean NOT NULL DEFAULT false,
   batch_id text,
-
-  -- Input identifiers
   input_phone text,
   input_phone_normalized text,
   input_email text,
@@ -77,60 +69,48 @@ create table public.investigations (
   input_business text,
   input_country text,
   input_country_code text,
-
-  -- Results
   summary text,
-  identity_count integer not null default 0,
-  evidence_count integer not null default 0,
-  source_count integer not null default 0,
+  identity_count integer NOT NULL DEFAULT 0,
+  evidence_count integer NOT NULL DEFAULT 0,
+  source_count integer NOT NULL DEFAULT 0,
   confidence real,
-  has_conflicts boolean not null default false,
-  location_status text not null default 'unavailable' check (location_status in ('live', 'last_known', 'historical', 'unavailable')),
-
-  -- AI assessment (stored as JSONB)
+  has_conflicts boolean NOT NULL DEFAULT false,
+  location_status text NOT NULL DEFAULT 'unavailable' CHECK (location_status IN ('live', 'last_known', 'historical', 'unavailable')),
   ai_assessment jsonb,
-
-  -- Retention
-  is_demo_data boolean not null default false,
+  is_demo_data boolean NOT NULL DEFAULT false,
   archived_at timestamptz,
-
-  -- Timestamps
   started_at timestamptz,
   completed_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-alter table public.investigations enable row level security;
+ALTER TABLE public.investigations ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view own investigations"
-  on public.investigations for select
-  using (auth.uid() = user_id);
-
-create policy "Users can insert own investigations"
-  on public.investigations for insert
-  with check (auth.uid() = user_id);
-
-create policy "Users can update own investigations"
-  on public.investigations for update
-  using (auth.uid() = user_id);
-
-create policy "Admins can view all investigations"
-  on public.investigations for select
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view own investigations" ON public.investigations FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own investigations" ON public.investigations FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can update own investigations" ON public.investigations FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all investigations" ON public.investigations FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- IDENTITY CANDIDATES
 -- ============================================================
-create table public.identity_candidates (
-  id uuid primary key default gen_random_uuid(),
-  investigation_id uuid not null references public.investigations(id) on delete cascade,
-  rank integer not null,
+CREATE TABLE IF NOT EXISTS public.identity_candidates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  investigation_id uuid NOT NULL REFERENCES public.investigations(id) ON DELETE CASCADE,
+  rank integer NOT NULL,
   name text,
   phone text,
   email text,
@@ -138,210 +118,185 @@ create table public.identity_candidates (
   website text,
   location text,
   photo_url text,
-  confidence real not null default 0,
-  verified_status text not null default 'unverified' check (verified_status in ('verified', 'strongly_corroborated', 'possible', 'unverified', 'conflicting')),
-  match_fields jsonb not null default '[]'::jsonb,
-  created_at timestamptz not null default now()
+  confidence real NOT NULL DEFAULT 0,
+  verified_status text NOT NULL DEFAULT 'unverified' CHECK (verified_status IN ('verified', 'strongly_corroborated', 'possible', 'unverified', 'conflicting')),
+  match_fields jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-alter table public.identity_candidates enable row level security;
+ALTER TABLE public.identity_candidates ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view candidates for own investigations"
-  on public.identity_candidates for select
-  using (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
-
-create policy "Users can insert candidates for own investigations"
-  on public.identity_candidates for insert
-  with check (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view candidates for own investigations" ON public.identity_candidates FOR SELECT USING (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can insert candidates for own investigations" ON public.identity_candidates FOR INSERT WITH CHECK (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- EVIDENCE ITEMS
 -- ============================================================
-create table public.evidence_items (
-  id uuid primary key default gen_random_uuid(),
-  investigation_id uuid not null references public.investigations(id) on delete cascade,
-  candidate_id uuid references public.identity_candidates(id) on delete set null,
-  claim text not null,
+CREATE TABLE IF NOT EXISTS public.evidence_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  investigation_id uuid NOT NULL REFERENCES public.investigations(id) ON DELETE CASCADE,
+  candidate_id uuid REFERENCES public.identity_candidates(id) ON DELETE SET NULL,
+  claim text NOT NULL,
   source_url text,
-  source_name text not null,
-  source_type text not null,
-  discovered_at timestamptz not null default now(),
+  source_name text NOT NULL,
+  source_type text NOT NULL,
+  discovered_at timestamptz NOT NULL DEFAULT now(),
   published_at timestamptz,
   excerpt text,
-  reliability_score real not null default 0,
-  relevance_score real not null default 0,
-  freshness_score real not null default 0,
-  verification_status text not null default 'unverified'
+  reliability_score real NOT NULL DEFAULT 0,
+  relevance_score real NOT NULL DEFAULT 0,
+  freshness_score real NOT NULL DEFAULT 0,
+  verification_status text NOT NULL DEFAULT 'unverified'
 );
 
-alter table public.evidence_items enable row level security;
+ALTER TABLE public.evidence_items ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view evidence for own investigations"
-  on public.evidence_items for select
-  using (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
-
-create policy "Users can insert evidence for own investigations"
-  on public.evidence_items for insert
-  with check (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view evidence for own investigations" ON public.evidence_items FOR SELECT USING (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can insert evidence for own investigations" ON public.evidence_items FOR INSERT WITH CHECK (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- DEVICE LOCATIONS
 -- ============================================================
-create table public.device_locations (
-  id uuid primary key default gen_random_uuid(),
-  investigation_id uuid not null references public.investigations(id) on delete cascade,
+CREATE TABLE IF NOT EXISTS public.device_locations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  investigation_id uuid NOT NULL REFERENCES public.investigations(id) ON DELETE CASCADE,
   device_id text,
-  provider text not null,
-  status text not null check (status in ('live', 'last_known', 'historical')),
+  provider text NOT NULL,
+  status text NOT NULL CHECK (status IN ('live', 'last_known', 'historical')),
   latitude real,
   longitude real,
   accuracy real,
   address text,
   timestamp timestamptz,
-  freshness text not null,
+  freshness text NOT NULL,
   device_status text,
   battery_level real,
   network_type text,
-  created_at timestamptz not null default now()
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-alter table public.device_locations enable row level security;
+ALTER TABLE public.device_locations ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view locations for own investigations"
-  on public.device_locations for select
-  using (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view locations for own investigations" ON public.device_locations FOR SELECT USING (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- TIMELINE EVENTS
 -- ============================================================
-create table public.timeline_events (
-  id uuid primary key default gen_random_uuid(),
-  investigation_id uuid not null references public.investigations(id) on delete cascade,
-  event_type text not null,
-  description text not null,
+CREATE TABLE IF NOT EXISTS public.timeline_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  investigation_id uuid NOT NULL REFERENCES public.investigations(id) ON DELETE CASCADE,
+  event_type text NOT NULL,
+  description text NOT NULL,
   metadata jsonb,
-  timestamp timestamptz not null default now()
+  timestamp timestamptz NOT NULL DEFAULT now()
 );
 
-alter table public.timeline_events enable row level security;
+ALTER TABLE public.timeline_events ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view timeline for own investigations"
-  on public.timeline_events for select
-  using (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
-
-create policy "Users can insert timeline for own investigations"
-  on public.timeline_events for insert
-  with check (
-    investigation_id in (
-      select id from public.investigations where user_id = auth.uid()
-    )
-  );
+DO $$ BEGIN
+  CREATE POLICY "Users can view timeline for own investigations" ON public.timeline_events FOR SELECT USING (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can insert timeline for own investigations" ON public.timeline_events FOR INSERT WITH CHECK (investigation_id IN (SELECT id FROM public.investigations WHERE user_id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
--- AUDIT EVENTS (admin viewable)
+-- AUDIT EVENTS
 -- ============================================================
-create table public.audit_events (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
-  action text not null,
+CREATE TABLE IF NOT EXISTS public.audit_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  action text NOT NULL,
   resource text,
   details text,
   ip_address text,
   user_agent text,
-  created_at timestamptz not null default now()
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 
-alter table public.audit_events enable row level security;
+ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can view own audit events"
-  on public.audit_events for select
-  using (auth.uid() = user_id);
-
-create policy "Admins can view all audit events"
-  on public.audit_events for select
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
-
-create policy "Authenticated users can insert audit events"
-  on public.audit_events for insert
-  with check (auth.uid() is not null);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own audit events" ON public.audit_events FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Admins can view all audit events" ON public.audit_events FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can insert audit events" ON public.audit_events FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
--- USER API KEYS (encrypted, user-managed)
+-- USER API KEYS
 -- ============================================================
-create table public.user_api_keys (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  provider text not null,
-  encrypted_key text not null,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique(user_id, provider)
+CREATE TABLE IF NOT EXISTS public.user_api_keys (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  provider text NOT NULL,
+  encrypted_key text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, provider)
 );
 
-alter table public.user_api_keys enable row level security;
+ALTER TABLE public.user_api_keys ENABLE ROW LEVEL SECURITY;
 
-create policy "Users can manage own API keys"
-  on public.user_api_keys for all
-  using (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can manage own API keys" ON public.user_api_keys FOR ALL USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- INDEXES
 -- ============================================================
-create index idx_investigations_user_id on public.investigations(user_id);
-create index idx_investigations_status on public.investigations(status);
-create index idx_investigations_created_at on public.investigations(created_at desc);
-create index idx_identity_candidates_investigation on public.identity_candidates(investigation_id);
-create index idx_evidence_items_investigation on public.evidence_items(investigation_id);
-create index idx_device_locations_investigation on public.device_locations(investigation_id);
-create index idx_timeline_events_investigation on public.timeline_events(investigation_id);
-create index idx_audit_events_user on public.audit_events(user_id);
-create index idx_audit_events_created on public.audit_events(created_at desc);
+CREATE INDEX IF NOT EXISTS idx_investigations_user_id ON public.investigations(user_id);
+CREATE INDEX IF NOT EXISTS idx_investigations_status ON public.investigations(status);
+CREATE INDEX IF NOT EXISTS idx_investigations_created_at ON public.investigations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_identity_candidates_investigation ON public.identity_candidates(investigation_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_items_investigation ON public.evidence_items(investigation_id);
+CREATE INDEX IF NOT EXISTS idx_device_locations_investigation ON public.device_locations(investigation_id);
+CREATE INDEX IF NOT EXISTS idx_timeline_events_investigation ON public.timeline_events(investigation_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_user ON public.audit_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_created ON public.audit_events(created_at DESC);
 
 -- ============================================================
 -- UPDATED_AT TRIGGER
 -- ============================================================
-create or replace function public.update_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
+CREATE OR REPLACE FUNCTION public.update_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
   new.updated_at = now();
-  return new;
-end;
+  RETURN new;
+END;
 $$;
 
-create trigger set_updated_at before update on public.investigations
-  for each row execute procedure public.update_updated_at();
+DROP TRIGGER IF EXISTS set_updated_at ON public.investigations;
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.investigations
+  FOR EACH ROW EXECUTE PROCEDURE public.update_updated_at();
 
-create trigger set_updated_at before update on public.profiles
-  for each row execute procedure public.update_updated_at();
+DROP TRIGGER IF EXISTS set_updated_at ON public.profiles;
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE PROCEDURE public.update_updated_at();
