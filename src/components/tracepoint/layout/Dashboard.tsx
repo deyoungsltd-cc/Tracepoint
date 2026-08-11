@@ -219,7 +219,11 @@ function DashboardContent() {
         </div>
         {dbNeedsSetup && (
           <div className="mt-1.5 p-1.5 rounded bg-[#c8a24e]/4 border border-[#c8a24e]/10">
-            <p className="text-[9px] text-[#c8a24e]/80 mb-1">Run schema in Supabase SQL Editor</p>
+            <p className="text-[9px] text-[#c8a24e]/80 mb-1">
+              {dbStatus?.fix === 'rls_policy'
+                ? 'RLS policy error in Supabase — fix in SQL Editor'
+                : 'Run schema in Supabase SQL Editor'}
+            </p>
             <a
               href={`https://supabase.com/dashboard/project/${dbStatus?.projectRef}/sql`}
               target="_blank"

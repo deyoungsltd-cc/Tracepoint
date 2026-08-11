@@ -52,8 +52,10 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'h-screen flex flex-col border-r border-border bg-sidebar transition-all duration-200 shrink-0',
-        sidebarOpen ? 'w-48' : 'w-11'
+        'h-dvh flex flex-col border-r border-border bg-sidebar transition-all duration-200 shrink-0',
+        sidebarOpen ? 'w-48' : 'w-11',
+        // On mobile (< 1024px), hide sidebar when collapsed to save screen space
+        !sidebarOpen && 'max-lg:w-0 max-lg:border-0 max-lg:overflow-hidden max-lg:p-0'
       )}
     >
       {/* Brand */}

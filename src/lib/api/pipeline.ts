@@ -58,6 +58,12 @@ function uuid(): string {
 
 // --- Server-side API proxies (keys never leave the server) ---
 
+// Module-level warning collector — populated during pipeline execution
+const pipelineWarnings: Array<{ stage: string; message: string; severity: 'config' | 'error' | 'warn' }> = [];
+
+export function getPipelineWarnings() { return [...pipelineWarnings]; }
+export function clearPipelineWarnings() { pipelineWarnings.length = 0; }
+
 async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | null> {
   try {
     const t0 = Date.now();
@@ -65,17 +71,22 @@ async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | 
     const ms = Date.now() - t0;
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error(`[Pipeline:Stage1] NumVerify API error ${res.status} (${ms}ms): ${body}`);
+      const errMsg = `NumVerify API error ${res.status}: ${body.substring(0, 120)}`;
+      console.error(`[Pipeline:Stage1] ${errMsg}`);
+      pipelineWarnings.push({ stage: 'Phone Validation', message: errMsg, severity: res.status === 500 && body.includes('not configured') ? 'config' : 'error' });
       return null;
     }
     const data = await res.json();
     console.log(`[Pipeline:Stage1] NumVerify OK (${ms}ms), valid=${data.valid}`);
     return data;
   } catch (err) {
-    console.error('[Pipeline:Stage1] NumVerify fetch failed:', err);
+    const errMsg = `NumVerify fetch failed: ${err}`;
+    console.error(`[Pipeline:Stage1] ${errMsg}`);
+    pipelineWarnings.push({ stage: 'Phone Validation', message: errMsg, severity: 'error' });
     return null;
   }
 }
+
 
 async function proxySerperSearch(query: string): Promise<Array<{ title: string; link: string; snippet: string }>> {
   try {
@@ -88,7 +99,9 @@ async function proxySerperSearch(query: string): Promise<Array<{ title: string; 
     const ms = Date.now() - t0;
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.error(`[Pipeline:Stage3] Serper API error ${res.status} (${ms}ms): ${body}`);
+      const errMsg = `Serper API error ${res.status}: ${body.substring(0, 120)}`;
+      console.error(`[Pipeline:Stage3] ${errMsg}`);
+      pipelineWarnings.push({ stage: 'Web Search', message: errMsg, severity: res.status === 500 && body.includes('not configured') ? 'config' : 'error' });
       return [];
     }
     const data = await res.json();
@@ -100,7 +113,9 @@ async function proxySerperSearch(query: string): Promise<Array<{ title: string; 
     console.log(`[Pipeline:Stage3] Serper OK (${ms}ms), ${results.length} results for: ${query.substring(0, 60)}`);
     return results;
   } catch (err) {
-    console.error('[Pipeline:Stage3] Serper fetch failed:', err);
+    const errMsg = `Serper fetch failed: ${err}`;
+    console.error(`[Pipeline:Stage3] ${errMsg}`);
+    pipelineWarnings.push({ stage: 'Web Search', message: errMsg, severity: 'error' });
     return [];
   }
 }
@@ -363,6 +378,7 @@ async function stagePhoneEnrichment(
       metadata: null,
       timestamp: timestampNow(),
     });
+    pipelineWarnings.push({ stage: 'Phone Enrichment', message: 'AbstractAPI key not configured (ABSTRACT_API_KEY)', severity: 'config' });
   }
 
   // --- Try Twilio as fallback/addition (if configured, adds caller name + call forwarding) ---
@@ -1172,6 +1188,7 @@ export async function runRealInvestigation(
   const allEvidence: EvidenceItem[] = [];
   const allTimeline: TimelineEvent[] = [];
   let country = config.country || '';
+  clearPipelineWarnings();
   console.log(`[Pipeline] === START investigation === phone=${config.phone}, email=${config.email}, depth=${config.depth}`);
 
   callbacks.onProgress('initializing', 'Initializing investigation...', 3);
@@ -1350,18 +1367,30 @@ export async function runRealInvestigation(
   }
 
   // --- Final summary ---
-  const warnings = allTimeline.filter(t => t.eventType === 'warning');
-  if (warnings.length > 0) {
+  const configWarnings = pipelineWarnings.filter(w => w.severity === 'config');
+  if (configWarnings.length > 0) {
+    const configMsg = `API CONFIGURATION REQUIRED: ${configWarnings.map(w => w.stage).join(', ')} key(s) not set. Set environment variables in Netlify → Site Settings → Environment or in .env.local for local dev.`;
     allTimeline.push({
       id: uuid(),
-      eventType: 'completed_with_warnings',
-      description: `Investigation completed with ${warnings.length} warning(s). Some API providers may not be configured. Check your environment variables.`,
-      metadata: { warningCount: warnings.length },
+      eventType: 'error',
+      description: configMsg,
+      metadata: { warnings: configWarnings, isConfigError: true },
       timestamp: timestampNow(),
     });
+    callbacks.onProgress('completed', configMsg, 100);
+  } else {
+    const warnings = allTimeline.filter(t => t.eventType === 'warning');
+    if (warnings.length > 0) {
+      allTimeline.push({
+        id: uuid(),
+        eventType: 'completed_with_warnings',
+        description: `Investigation completed with ${warnings.length} warning(s). Some API providers may be degraded.`,
+        metadata: { warningCount: warnings.length },
+        timestamp: timestampNow(),
+      });
+    }
+    callbacks.onProgress('completed', 'Investigation complete.', 100);
   }
-
-  callbacks.onProgress('completed', 'Investigation complete.', 100);
   const elapsed = Date.now() - pipelineStart;
   console.log(`[Pipeline] === END investigation === ${elapsed}ms, ${allEvidence.length} evidence, ${candidates.length} candidates, confidence=${baseInvestigation.confidence}`);
 

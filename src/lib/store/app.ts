@@ -181,7 +181,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 export const useNavStore = create<NavStore>((set) => ({
   currentView: 'login',
   selectedInvestigationId: null,
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 1024 : true,
   viewMode: 'globe',
 
   navigate: (view, investigationId) => {

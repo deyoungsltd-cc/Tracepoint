@@ -44,6 +44,23 @@ export async function GET() {
       });
     }
 
+    // RLS policy issue — table exists but policies are broken
+    if (error.message?.includes('infinite recursion') || error.message?.includes('policy')) {
+      const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
+      return NextResponse.json({
+        configured: true,
+        tablesExist: false,
+        error: 'RLS policy error — the table exists but row-level security policies have an infinite recursion. Fix the policies in Supabase SQL Editor.',
+        projectRef,
+        fix: 'rls_policy',
+        instructions: [
+          '1. Go to Supabase Dashboard → SQL Editor',
+          '2. Drop and recreate the policies (see supabase-schema.sql)',
+          '3. Or temporarily disable RLS: ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;',
+        ],
+      });
+    }
+
     // API key issue — the key is invalid or revoked
     if (error.message?.includes('API key') || error.code === 'PGRST301' || error.message?.includes('Invalid')) {
       return NextResponse.json({

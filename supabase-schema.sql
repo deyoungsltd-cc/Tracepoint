@@ -17,6 +17,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Security definer function to check admin role (avoids RLS infinite recursion)
+CREATE OR REPLACE FUNCTION public.is_admin(check_uid uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.profiles WHERE id = check_uid AND role = 'admin');
+END;
+$$;
+
 DO $$ BEGIN
   CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -26,7 +37,10 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
-  CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+  CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (
+    -- Use security definer function to avoid infinite recursion
+    public.is_admin(auth.uid())
+  );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -100,7 +114,9 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
-  CREATE POLICY "Admins can view all investigations" ON public.investigations FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+  CREATE POLICY "Admins can view all investigations" ON public.investigations FOR SELECT USING (
+    public.is_admin(auth.uid())
+  );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -238,7 +254,9 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
-  CREATE POLICY "Admins can view all audit events" ON public.audit_events FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+  CREATE POLICY "Admins can view all audit events" ON public.audit_events FOR SELECT USING (
+    public.is_admin(auth.uid())
+  );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN

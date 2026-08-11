@@ -211,6 +211,36 @@ export default function InvestigationWorkspace() {
         {/* Results */}
         {isCompleted && currentInvestigation && (
           <div className="space-y-4">
+            {/* Config Error Banner */}
+            {currentInvestigation.timeline.some(t => t.eventType === 'error' && t.metadata?.isConfigError) && (
+              <div className="p-4 rounded bg-[#c8a24e]/6 border border-[#c8a24e]/20">
+                <div className="flex items-start gap-2">
+                  <div className="w-5 h-5 rounded-full bg-[#c8a24e]/10 border border-[#c8a24e]/15 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-[#c8a24e] text-xs font-bold">!</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-[#c8a24e]">API Keys Not Configured</p>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                      Some API providers returned configuration errors. The investigation completed with limited data.
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+                      To fix: Go to <strong>Netlify → Site Settings → Environment variables</strong> and add the missing keys. For local dev, add them to <code className="text-[10px] bg-accent px-1 rounded">.env.local</code>.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {currentInvestigation.timeline
+                        .filter(t => t.eventType === 'error' && t.metadata?.isConfigError)
+                        .flatMap(t => t.metadata?.warnings || [])
+                        .map((w: any, i: number) => (
+                          <span key={i} className="text-[9px] mono-label px-1.5 py-0.5 rounded bg-[#c8a24e]/8 text-[#c8a24e]/70">
+                            {w.stage}: {w.message}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Confidence Score */}
             <div className="surface p-4 surface-highlight relative">
               <ConfidenceMeter score={currentInvestigation.confidence || 0} size="lg" showLabel={true} animated />
