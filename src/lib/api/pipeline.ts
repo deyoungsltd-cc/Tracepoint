@@ -1,14 +1,14 @@
 // ============================================================
 // TRACEPOINT — Real Investigation Pipeline (Enhanced)
 // Uses server-side proxy routes for all API calls.
-// API keys never leave the browser... wait, they never leave the server.
+// API keys never leave the server.
 //
 // Pipeline stages:
 //   1. Phone Validation (NumVerify)
-//   2. Twilio Enrichment
+//   2. Phone Enrichment (AbstractAPI free / Twilio fallback)
 //   3. Web Search (Serper)
-//   4. Social Profile Scraper (new)
-//   5. Messaging OSINT (WhatsApp/Telegram/Signal) (new)
+//   4. Social Profile Scraper
+//   5. Messaging OSINT (WhatsApp/Telegram/Signal)
 //   6. Identity Correlation
 //   7. Confidence Calculation
 //   8. AI Assessment (OpenAI GPT-4o)
@@ -19,6 +19,7 @@ import type { Investigation, EvidenceItem, IdentityCandidate, TimelineEvent, AIA
 import { analyzeIdentity } from '@/lib/api/openai';
 import { lookupTwilio } from '@/lib/api/twilio';
 import type { TwilioLookupResult } from '@/lib/api/twilio';
+import { lookupAbstractPhone, type AbstractPhoneResult } from '@/lib/api/abstractphone';
 import { extractSocialUrls, scrapeSocialProfiles, type ScrapedProfile } from '@/lib/api/social-scraper';
 import { checkAllMessagingPlatforms, type MessagingCheckResult } from '@/lib/api/messaging-osint';
 import { withCache, cacheKey, TTL } from '@/lib/api-cache';
@@ -156,8 +157,10 @@ async function stagePhoneValidation(config: PipelineConfig): Promise<{
   return { phoneInfo, evidence, timeline, country };
 }
 
-// Stage 2: Twilio Enrichment (rich phone data via server proxy) — cached
-async function stageTwilioEnrichment(
+// Stage 2: Phone Enrichment (AbstractAPI free tier first, Twilio as fallback) — cached
+// AbstractAPI: 100 free calls/month — carrier, line type, VOIP detection, connection status
+// Twilio: paid — caller name (CNAM), call forwarding, MCC/MNC
+async function stagePhoneEnrichment(
   config: PipelineConfig,
   currentCountry: string,
   hasWebCandidates: boolean,
@@ -178,148 +181,188 @@ async function stageTwilioEnrichment(
     return { evidence, timeline, country, fallbackCandidateName, callerName };
   }
 
-  const result: TwilioLookupResult | null = await withCache(
-    cacheKey('twilio', config.phoneNormalized),
-    () => lookupTwilio(config.phoneNormalized!),
-    TTL.TWILIO_LOOKUP
+  // --- Try AbstractAPI (FREE) first ---
+  const abstractResult: AbstractPhoneResult | null = await withCache(
+    cacheKey('abstractphone', config.phoneNormalized),
+    () => lookupAbstractPhone(config.phoneNormalized!),
+    30 * 60 * 1000
   );
 
-  // Graceful skip — Twilio not configured or request failed
-  if (!result) {
-    timeline.push({
-      id: uuid(),
-      eventType: 'twilio_skipped',
-      description: 'Twilio enrichment skipped — service unavailable or not configured',
-      metadata: null,
-      timestamp: timestampNow(),
-    });
-    return { evidence, timeline, country, fallbackCandidateName, callerName };
-  }
+  if (abstractResult && abstractResult.valid) {
+    const provider = 'AbstractAPI';
+    const phoneType = abstractResult.type || 'unknown';
+    const carrier = abstractResult.carrier || 'Unknown';
+    const location = abstractResult.location || '';
+    const connected = abstractResult.connected;
+    const isVoip = phoneType.toLowerCase() === 'voip';
+    const isRoaming = abstractResult.roaming === true;
 
-  // --- Caller Name ---
-  if (result.caller_name?.caller_name) {
-    const name = result.caller_name.caller_name;
-    callerName = name;
     timeline.push({
       id: uuid(),
-      eventType: 'twilio_caller_name',
-      description: `Caller name retrieved: ${name}`,
-      metadata: { firstName: result.caller_name.first_name, lastName: result.caller_name.last_name },
+      eventType: 'abstractphone_enrichment',
+      description: `${provider} enrichment: ${carrier} (${phoneType})${location ? ` — ${location}` : ''}`,
+      metadata: { provider, carrier, type: phoneType, connected, roaming: isRoaming },
       timestamp: timestampNow(),
     });
+
+    // Carrier evidence
     evidence.push({
       id: uuid(),
-      claim: `Registered caller name for ${config.phoneNormalized} is "${name}"`,
-      sourceName: 'Twilio Caller Name',
+      claim: `Phone ${config.phoneNormalized} is carried by ${carrier} (${phoneType})${location ? ` in ${location}` : ''}`,
+      sourceName: `${provider} Phone Enrichment`,
       sourceType: 'phone_validation',
       sourceUrl: null,
       discoveredAt: timestampNow(),
       publishedAt: null,
-      excerpt: `Caller Name: ${name}${result.caller_name.first_name ? ` (First: ${result.caller_name.first_name}, Last: ${result.caller_name.last_name})` : ''}`,
-      reliabilityScore: 85,
-      relevanceScore: 80,
-      freshnessScore: 99,
-      verificationStatus: 'possible',
-    });
-
-    // If no web candidates were found, use the caller name for the fallback candidate
-    if (!hasWebCandidates && !fallbackCandidateName) {
-      fallbackCandidateName = name;
-    }
-  }
-
-  // --- Carrier Info ---
-  if (result.carrier) {
-    const { name, type, mobile_country_code, mobile_network_code } = result.carrier;
-    timeline.push({
-      id: uuid(),
-      eventType: 'twilio_carrier',
-      description: `Carrier identified: ${name || 'Unknown'} (${type || 'Unknown type'})`,
-      metadata: { name, type, mcc: mobile_country_code, mnc: mobile_network_code },
-      timestamp: timestampNow(),
-    });
-    evidence.push({
-      id: uuid(),
-      claim: `Phone ${config.phoneNormalized} is carried by ${name || 'an unknown provider'} (${type || 'unknown type'}, MCC: ${mobile_country_code || 'N/A'}, MNC: ${mobile_network_code || 'N/A'})`,
-      sourceName: 'Twilio Carrier Lookup',
-      sourceType: 'phone_validation',
-      sourceUrl: null,
-      discoveredAt: timestampNow(),
-      publishedAt: null,
-      excerpt: `Carrier: ${name || 'N/A'}, Type: ${type || 'N/A'}, MCC: ${mobile_country_code || 'N/A'}, MNC: ${mobile_network_code || 'N/A'}`,
-      reliabilityScore: 90,
-      relevanceScore: 70,
-      freshnessScore: 99,
-      verificationStatus: 'verified',
-    });
-  }
-
-  // --- Line Type Intelligence ---
-  if (result.line_type_intelligence) {
-    const { type, mobile_country_code, mobile_network_code, carrier_name } = result.line_type_intelligence;
-    timeline.push({
-      id: uuid(),
-      eventType: 'twilio_line_type',
-      description: `Line type: ${type || 'Unknown'}`,
-      metadata: { type, mcc: mobile_country_code, mnc: mobile_network_code, carrierName: carrier_name },
-      timestamp: timestampNow(),
-    });
-    evidence.push({
-      id: uuid(),
-      claim: `Line type intelligence for ${config.phoneNormalized}: ${type || 'unknown'}${carrier_name ? ` via ${carrier_name}` : ''}`,
-      sourceName: 'Twilio Line Type Intelligence',
-      sourceType: 'phone_validation',
-      sourceUrl: null,
-      discoveredAt: timestampNow(),
-      publishedAt: null,
-      excerpt: `Line Type: ${type || 'N/A'}, Carrier: ${carrier_name || 'N/A'}, MCC: ${mobile_country_code || 'N/A'}, MNC: ${mobile_network_code || 'N/A'}`,
+      excerpt: `Carrier: ${carrier}, Type: ${phoneType}, Location: ${location || 'N/A'}, Connected: ${connected ? 'Yes' : 'No'}${isRoaming ? ', Roaming' : ''}${isVoip ? ', VOIP' : ''}`,
       reliabilityScore: 90,
       relevanceScore: 75,
       freshnessScore: 99,
       verificationStatus: 'verified',
     });
-  }
 
-  // --- Call Forwarding Status ---
-  if (result.call_forwarding) {
-    const enabled = result.call_forwarding.enabled;
+    // VOIP detection — important for fraud assessment
+    if (isVoip) {
+      evidence.push({
+        id: uuid(),
+        claim: `Phone ${config.phoneNormalized} is a VOIP number — potentially higher risk for identity verification`,
+        sourceName: `${provider} VOIP Detection`,
+        sourceType: 'phone_validation',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Line type: VOIP (virtual number). VOIP numbers are often used for temporary or anonymous communications.`,
+        reliabilityScore: 85,
+        relevanceScore: 70,
+        freshnessScore: 99,
+        verificationStatus: 'verified',
+      });
+    }
+
+    // Connection status
+    if (connected !== undefined && connected !== null) {
+      evidence.push({
+        id: uuid(),
+        claim: `Phone ${config.phoneNormalized} is currently ${connected ? 'ACTIVE and connected' : 'DISCONNECTED or inactive'}`,
+        sourceName: `${provider} Connection Check`,
+        sourceType: 'phone_validation',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Status: ${connected ? 'Connected' : 'Disconnected'}`,
+        reliabilityScore: 80,
+        relevanceScore: 65,
+        freshnessScore: 99,
+        verificationStatus: connected ? 'verified' : 'possible',
+      });
+    }
+
+    // Update country from AbstractAPI
+    if (abstractResult.country?.code && !country) {
+      country = abstractResult.country.code;
+    }
+    if (location && !country) {
+      // Fallback: try to derive country from location string
+      const countryNames: Record<string, string> = {
+        'united states': 'US', 'united kingdom': 'GB', 'canada': 'CA', 'australia': 'AU',
+        'germany': 'DE', 'france': 'FR', 'india': 'IN', 'japan': 'JP', 'brazil': 'BR',
+        'nigeria': 'NG', 'south africa': 'ZA', 'mexico': 'MX', 'china': 'CN',
+      };
+      const mapped = countryNames[location.toLowerCase()];
+      if (mapped) country = mapped;
+    }
+
+    // AbstractAPI doesn't provide caller name, so we skip that here.
+    // Twilio below can still add it if configured.
+  } else {
     timeline.push({
       id: uuid(),
-      eventType: 'twilio_call_forwarding',
-      description: `Call forwarding: ${enabled ? 'ENABLED' : 'disabled'}`,
-      metadata: { enabled },
+      eventType: 'abstractphone_skipped',
+      description: 'AbstractAPI enrichment skipped — service unavailable or not configured',
+      metadata: null,
       timestamp: timestampNow(),
-    });
-    evidence.push({
-      id: uuid(),
-      claim: `Call forwarding for ${config.phoneNormalized} is ${enabled ? 'enabled — number may be redirected to another device' : 'disabled'}`,
-      sourceName: 'Twilio Call Forwarding Check',
-      sourceType: 'phone_validation',
-      sourceUrl: null,
-      discoveredAt: timestampNow(),
-      publishedAt: null,
-      excerpt: `Call Forwarding: ${enabled ? 'Enabled' : 'Disabled'}`,
-      reliabilityScore: 95,
-      relevanceScore: 65,
-      freshnessScore: 99,
-      verificationStatus: 'verified',
     });
   }
 
-  // --- Update country from Twilio MCC if we don't have one ---
-  const mcc = result.carrier?.mobile_country_code || result.line_type_intelligence?.mobile_country_code;
-  if (mcc && !country) {
-    const mccCountryMap: Record<string, string> = {
-      '310': 'US', '311': 'US', '312': 'US', '313': 'US', '314': 'US', '315': 'US', '316': 'US',
-      '234': 'GB', '235': 'GB',
-      '208': 'FR', '222': 'IT', '262': 'DE', '214': 'ES',
-      '404': 'IN', '405': 'IN', '406': 'IN', '407': 'IN', '408': 'IN', '409': 'IN', '410': 'IN', '411': 'IN', '412': 'IN', '413': 'IN', '414': 'IN', '415': 'IN',
-      '730': 'CL', '724': 'BR', '334': 'MX', '732': 'CO',
-      '440': 'JP', '450': 'KR', '460': 'CN', '454': 'HK', '525': 'SG',
-      '530': 'NZ', '505': 'AU', '302': 'CA',
-    };
-    const mapped = mccCountryMap[mcc];
-    if (mapped) country = mapped;
+  // --- Try Twilio as fallback/addition (if configured, adds caller name + call forwarding) ---
+  const twilioResult: TwilioLookupResult | null = await withCache(
+    cacheKey('twilio', config.phoneNormalized),
+    () => lookupTwilio(config.phoneNormalized!),
+    TTL.TWILIO_LOOKUP
+  );
+
+  if (twilioResult) {
+    // Caller Name (CNAM) — only Twilio provides this
+    if (twilioResult.caller_name?.caller_name) {
+      const name = twilioResult.caller_name.caller_name;
+      callerName = name;
+      timeline.push({
+        id: uuid(),
+        eventType: 'twilio_caller_name',
+        description: `Caller name retrieved: ${name}`,
+        metadata: { firstName: twilioResult.caller_name.first_name, lastName: twilioResult.caller_name.last_name },
+        timestamp: timestampNow(),
+      });
+      evidence.push({
+        id: uuid(),
+        claim: `Registered caller name for ${config.phoneNormalized} is "${name}"`,
+        sourceName: 'Twilio Caller Name',
+        sourceType: 'phone_validation',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Caller Name: ${name}${twilioResult.caller_name.first_name ? ` (First: ${twilioResult.caller_name.first_name}, Last: ${twilioResult.caller_name.last_name})` : ''}`,
+        reliabilityScore: 85,
+        relevanceScore: 80,
+        freshnessScore: 99,
+        verificationStatus: 'possible',
+      });
+      if (!hasWebCandidates && !fallbackCandidateName) {
+        fallbackCandidateName = name;
+      }
+    }
+
+    // Call Forwarding — only Twilio provides this
+    if (twilioResult.call_forwarding) {
+      const enabled = twilioResult.call_forwarding.enabled;
+      timeline.push({
+        id: uuid(),
+        eventType: 'twilio_call_forwarding',
+        description: `Call forwarding: ${enabled ? 'ENABLED' : 'disabled'}`,
+        metadata: { enabled },
+        timestamp: timestampNow(),
+      });
+      evidence.push({
+        id: uuid(),
+        claim: `Call forwarding for ${config.phoneNormalized} is ${enabled ? 'enabled — number may be redirected to another device' : 'disabled'}`,
+        sourceName: 'Twilio Call Forwarding Check',
+        sourceType: 'phone_validation',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Call Forwarding: ${enabled ? 'Enabled' : 'Disabled'}`,
+        reliabilityScore: 95,
+        relevanceScore: 65,
+        freshnessScore: 99,
+        verificationStatus: 'verified',
+      });
+    }
+
+    // MCC-based country fallback from Twilio
+    const mcc = twilioResult.carrier?.mobile_country_code || twilioResult.line_type_intelligence?.mobile_country_code;
+    if (mcc && !country) {
+      const mccCountryMap: Record<string, string> = {
+        '310': 'US', '311': 'US', '312': 'US', '313': 'US', '314': 'US', '315': 'US', '316': 'US',
+        '234': 'GB', '235': 'GB',
+        '208': 'FR', '222': 'IT', '262': 'DE', '214': 'ES',
+        '404': 'IN', '405': 'IN', '406': 'IN', '407': 'IN', '408': 'IN', '409': 'IN', '410': 'IN', '411': 'IN', '412': 'IN', '413': 'IN', '414': 'IN', '415': 'IN',
+        '730': 'CL', '724': 'BR', '334': 'MX', '732': 'CO',
+        '440': 'JP', '450': 'KR', '460': 'CN', '454': 'HK', '525': 'SG',
+        '530': 'NZ', '505': 'AU', '302': 'CA',
+      };
+      const mapped = mccCountryMap[mcc];
+      if (mapped) country = mapped;
+    }
   }
 
   return { evidence, timeline, country, fallbackCandidateName, callerName };
@@ -753,13 +796,13 @@ export async function runRealInvestigation(
   allTimeline.push(...phoneResult.timeline);
   if (phoneResult.country) country = phoneResult.country;
 
-  // --- Stage 2: Twilio Enrichment (cached) ---
-  callbacks.onProgress('enrichment', 'Enriching phone data via Twilio...', 18);
-  const twilioResult = await stageTwilioEnrichment(config, country, false, null);
-  allEvidence.push(...twilioResult.evidence);
-  allTimeline.push(...twilioResult.timeline);
-  if (twilioResult.country) country = twilioResult.country;
-  const twilioCallerName = twilioResult.callerName;
+  // --- Stage 2: Phone Enrichment (cached) ---
+  callbacks.onProgress('enrichment', 'Enriching phone data...', 18);
+  const enrichResult = await stagePhoneEnrichment(config, country, false, null);
+  allEvidence.push(...enrichResult.evidence);
+  allTimeline.push(...enrichResult.timeline);
+  if (enrichResult.country) country = enrichResult.country;
+  const callerName = enrichResult.callerName;
 
   // --- Stage 3: Web Search (cached) ---
   callbacks.onProgress('discovery', 'Searching public sources...', 30);
@@ -783,10 +826,10 @@ export async function runRealInvestigation(
   callbacks.onProgress('correlating', 'Correlating identities...', 62);
   const { candidates, updatedEvidence } = stageCorrelation(allEvidence, phoneResult.phoneInfo, config);
 
-  // Apply Twilio caller name to candidates that have no name yet
-  if (twilioCallerName) {
+  // Apply caller name from phone enrichment to candidates that have no name yet
+  if (callerName) {
     for (const c of candidates) {
-      if (!c.name) c.name = twilioCallerName;
+      if (!c.name) c.name = callerName;
     }
   }
 
