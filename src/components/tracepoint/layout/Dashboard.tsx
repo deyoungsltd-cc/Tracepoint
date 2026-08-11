@@ -2,11 +2,12 @@
 
 import React, { useEffect, Suspense, lazy } from 'react';
 import { useNavStore, useInvestigationStore, useGlobeStore, useAdminStore } from '@/lib/store/app';
-import { Crosshair, Clock, Activity, Globe2, BarChart3, Database, Shield, Zap } from 'lucide-react';
+import { Crosshair, Clock, Activity, Globe2, BarChart3, Database, Shield, Zap, Layers } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { listInvestigations } from '@/lib/supabase/data';
 import dynamic from 'next/dynamic';
 import { useState, useEffect as useEff2 } from 'react';
+import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter';
 
 const GlobeView = dynamic(() => import('@/components/tracepoint/globe/GlobeView').then(m => ({ default: m.GlobeView })), { ssr: false });
 const MapLibreMap = dynamic(() => import('@/components/tracepoint/globe/MapLibreMap'), { ssr: false });
@@ -63,11 +64,16 @@ function DashboardContent() {
   const adminStore = useAdminStore();
   const globe = useGlobeStore();
   const { investigations } = invStore;
-  const { loadDemoInvestigation } = invStore;
+  const { loadDemoInvestigation, loadPersistedInvestigations } = invStore;
   const { providers } = adminStore;
   const { markers, setMarkers, arcs, setArcs } = globe;
   const { navigate, viewMode } = nav;
   const [dbStatus, setDbStatus] = useState<DbSetupStatus | null>(null);
+
+  // Load persisted investigations on mount
+  useEffect(() => {
+    loadPersistedInvestigations();
+  }, [loadPersistedInvestigations]);
 
   // Check DB setup status
   useEff2(() => {
@@ -141,6 +147,13 @@ function DashboardContent() {
           />
         </div>
 
+        {/* Avg confidence bar */}
+        {avgConf !== null && (
+          <div className="surface p-2">
+            <ConfidenceMeter score={avgConf} size="md" animated />
+          </div>
+        )}
+
         {/* Actions */}
         <div className="surface p-2 flex flex-col gap-1">
           <button
@@ -148,6 +161,12 @@ function DashboardContent() {
             className="flex items-center gap-2 px-2.5 py-2 rounded text-[11px] font-medium border border-[#c8a24e]/20 bg-[#c8a24e]/6 text-[#c8a24e] hover:bg-[#c8a24e]/12 transition-all duration-150 text-left"
           >
             <Crosshair className="w-3 h-3 shrink-0" /> New Investigation
+          </button>
+          <button
+            onClick={() => navigate('batch-lookup')}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left"
+          >
+            <Layers className="w-3 h-3 shrink-0" /> Batch Lookup
           </button>
           <button
             onClick={loadDemoInvestigation}
@@ -166,7 +185,7 @@ function DashboardContent() {
         {/* Provider Status */}
         <div className="surface p-2 flex-1">
           <div className="mono-label mb-2">Data Providers</div>
-          {providers.slice(0, 6).map((p) => (
+          {providers.slice(0, 7).map((p) => (
             <div key={p.name} className="flex items-center justify-between py-1">
               <div className="flex items-center gap-1.5">
                 <div className={`status-dot ${p.health}`} />
@@ -190,7 +209,7 @@ function DashboardContent() {
             ) : dbConnected ? (
               <span className="intel-badge text-[#4a9e5a] bg-[#4a9e5a]/8 border border-[#4a9e5a]/15">CONNECTED</span>
             ) : (
-              <span className="intel-badge">OFFLINE</span>
+              <span className="intel-badge">LOCAL STORAGE</span>
             )}
           </div>
           {dbNeedsSetup && (
@@ -283,11 +302,10 @@ function DashboardContent() {
           ) : (
             <div className="flex flex-col gap-1">
               {recent.map((inv) => {
-                const confCol = inv.confidence && inv.confidence >= 80 ? '#4a9e5a' : inv.confidence && inv.confidence >= 50 ? '#c8a24e' : '#5e665c';
                 return (
                   <button
                     key={inv.id}
-                    onClick={() => navigate('investigation-detail', inv.id)}
+                    onClick={() => { invStore.selectInvestigation(inv.id); navigate('investigation-detail', inv.id); }}
                     className={inv.isDemoData ? 'demo-mark relative' : ''}
                     style={{ width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: '#1a1e1b', cursor: 'pointer' }}
                   >
@@ -295,9 +313,9 @@ function DashboardContent() {
                       <span className="text-[10px] text-foreground max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
                         {inv.inputName || inv.inputPhone || inv.inputEmail || 'Unknown'}
                       </span>
-                      <span className="text-[9px] font-mono font-medium" style={{ color: confCol }}>{inv.confidence || 0}%</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <ConfidenceMeter score={inv.confidence || 0} size="sm" showLabel={false} />
+                    <div className="flex items-center gap-1.5 mt-1">
                       <span className="source-badge">{inv.depth}</span>
                       <span className="text-[9px] text-muted-foreground">{inv.identityCount} id · {inv.evidenceCount} ev</span>
                     </div>

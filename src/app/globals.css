@@ -90,6 +90,87 @@
   }
 }
 
+/* Light mode overrides */
+:root:not(.dark) {
+  --background: #f5f5f3;
+  --foreground: #1a1e1b;
+  --card: #ffffff;
+  --card-foreground: #1a1e1b;
+  --popover: #ffffff;
+  --popover-foreground: #1a1e1b;
+  --primary: #a07828;
+  --primary-foreground: #ffffff;
+  --secondary: #eceee8;
+  --secondary-foreground: #1a1e1b;
+  --muted: #f0f0ec;
+  --muted-foreground: #6b7068;
+  --accent: #e8e9e4;
+  --accent-foreground: #1a1e1b;
+  --destructive: #c44040;
+  --border: #d8dad5;
+  --input: #d8dad5;
+  --ring: #a07828;
+  --chart-1: #a07828;
+  --chart-2: #3a8a4a;
+  --chart-3: #c44040;
+  --chart-4: #8a8e8a;
+  --chart-5: #c0c4c0;
+  --sidebar: #eaecea;
+  --sidebar-foreground: #4a4e4a;
+  --sidebar-primary: #a07828;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d8dad5;
+  --sidebar-accent-foreground: #1a1e1b;
+  --sidebar-border: #d0d2cd;
+  --sidebar-ring: #a07828;
+}
+
+:root:not(.dark) .surface {
+  background: #ffffff;
+  border-color: #d8dad5;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+:root:not(.dark) .globe-bg {
+  background: radial-gradient(ellipse at 40% 45%, #e8e9e4 0%, #f0f0ec 70%);
+}
+
+:root:not(.dark) .mono-label {
+  color: #6b7068;
+}
+
+:root:not(.dark) .mono-value {
+  color: #a07828;
+}
+
+:root:not(.dark) .data-grid-bg {
+  background-image:
+    linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+}
+
+:root:not(.dark) .intel-badge {
+  background: rgba(160,120,40,0.06);
+}
+
+:root:not(.dark) .source-badge {
+  background: #f0f0ec;
+  color: #6b7068;
+  border-color: #d8dad560;
+}
+
+:root:not(.dark) .progress-track {
+  background: #e0e0dc;
+}
+
+:root:not(.dark) .confidence-bar {
+  background: #e0e0dc;
+}
+
+:root:not(.dark) .status-dot.healthy { box-shadow: 0 0 6px rgba(58,138,74,0.3); }
+:root:not(.dark) .status-dot.degraded { box-shadow: 0 0 6px rgba(160,120,40,0.3); }
+:root:not(.dark) .status-dot.down { box-shadow: 0 0 6px rgba(196,64,64,0.3); }
+
 /* Scrollbar — minimal, integrated */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

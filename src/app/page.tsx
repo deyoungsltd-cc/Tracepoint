@@ -9,9 +9,10 @@ const AuthView = lazy(() => import('@/components/tracepoint/auth/AuthView'));
 const DashboardView = lazy(() => import('@/components/tracepoint/layout/Dashboard'));
 const InvestigationWorkspace = lazy(() => import('@/components/tracepoint/investigation/InvestigationWorkspace'));
 const InvestigationDetail = lazy(() => import('@/components/tracepoint/investigation/InvestigationDetail'));
+const BatchLookup = lazy(() => import('@/components/tracepoint/investigation/BatchLookup'));
 const HistoryView = lazy(() => import('@/components/tracepoint/layout/HistoryView'));
 const DevicesView = lazy(() => import('@/components/tracepoint/layout/DevicesView'));
-// Admin is now a separate route at /admin — no longer embedded in the main page
+const DeviceFingerprint = lazy(() => import('@/components/tracepoint/shared/DeviceFingerprint'));
 const SettingsView = lazy(() => import('@/components/tracepoint/layout/SettingsView'));
 const ReportsView = lazy(() => import('@/components/tracepoint/layout/ReportsView'));
 
@@ -37,8 +38,10 @@ function AppShell() {
             {currentView === 'dashboard' && <DashboardView />}
             {currentView === 'investigation' && <InvestigationWorkspace />}
             {currentView === 'investigation-detail' && <InvestigationDetail />}
+            {currentView === 'batch-lookup' && <BatchLookup />}
             {currentView === 'history' && <HistoryView />}
             {currentView === 'devices' && <DevicesView />}
+            {currentView === 'device-fingerprint' && <DeviceFingerprint />}
             {currentView === 'settings' && <SettingsView />}
             {currentView === 'reports' && <ReportsView />}
           </Suspense>

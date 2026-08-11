@@ -4,6 +4,7 @@ import { useNavStore, useAuthStore, useInvestigationStore } from '@/lib/store/ap
 import { Globe, Map, List, FileSearch, Bell, Menu, LogOut, Radio } from 'lucide-react';
 import type { ViewMode } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { ThemeToggle } from '@/components/tracepoint/shared/ThemeToggle';
 
 const views: Array<{ mode: ViewMode; label: string; icon: React.ElementType }> = [
   { mode: 'globe', label: 'Globe', icon: Globe },
@@ -16,8 +17,10 @@ const titles: Record<string, string> = {
   dashboard: 'Dashboard',
   investigation: 'Investigate',
   'investigation-detail': 'Investigation',
+  'batch-lookup': 'Batch Lookup',
   history: 'History',
   devices: 'Devices',
+  'device-fingerprint': 'Device Fingerprint',
   admin: 'Administration',
   settings: 'Settings',
   reports: 'Reports',
@@ -82,6 +85,8 @@ export function Header() {
           ))}
         </div>
       )}
+
+      <ThemeToggle />
 
       <button className="p-1 rounded hover:bg-accent text-muted-foreground relative transition-colors">
         <Bell className="w-3.5 h-3.5" />

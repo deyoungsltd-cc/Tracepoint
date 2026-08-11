@@ -18,6 +18,7 @@ import type {
 import { runRealInvestigation } from '@/lib/api/pipeline';
 import { saveInvestigation } from '@/lib/supabase/data';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { saveToLocal, loadFromLocal, deleteFromLocal } from '@/lib/localStorage';
 
 // --- Auth Store ---
 interface AuthStore {
@@ -52,8 +53,10 @@ interface InvestigationStore {
   startInvestigation: (query: Record<string, string>) => Promise<void>;
   startBatchInvestigation: (file: File) => Promise<void>;
   selectInvestigation: (id: string) => void;
+  deleteInvestigation: (id: string) => void;
   clearCurrent: () => void;
   loadDemoInvestigation: () => void;
+  loadPersistedInvestigations: () => void;
 }
 
 // --- Settings Store ---
@@ -84,6 +87,7 @@ interface GlobeStore {
   setArcs: (arcs: GlobeArc[]) => void;
   focusLocation: (lat: number, lng: number) => void;
   clearFocus: () => void;
+  addInvestigationMarkers: (investigation: Investigation) => void;
 }
 
 // ============================================================
@@ -97,7 +101,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   login: async (_email: string, _password: string) => {
     set({ isLoading: true });
-    // In prototype: simulate login with demo user
     await new Promise((r) => setTimeout(r, 800));
     set({
       user: {
@@ -166,10 +169,7 @@ export const useNavStore = create<NavStore>((set) => ({
   viewMode: 'globe',
 
   navigate: (view, investigationId) => {
-    set({
-      currentView: view,
-      selectedInvestigationId: investigationId || null,
-    });
+    set({ currentView: view, selectedInvestigationId: investigationId || null });
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),
@@ -193,7 +193,6 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
   startInvestigation: async (query: Record<string, string>) => {
     set({ isRunning: true, progress: { stage: 'initializing', progress: 0, message: 'Initializing investigation...', timestamp: new Date().toISOString() } });
     try {
-      // Always use the real pipeline — API calls go through server-side proxies
       const { investigation, aiAssessment } = await runRealInvestigation(
         {
           phone: query.phone || undefined,
@@ -204,7 +203,11 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
         },
         { onProgress: (stage, message, progress) => { set({ progress: { stage, progress, message, timestamp: new Date().toISOString() } }); } },
       );
+      // Persist to localStorage always, to Supabase if configured
+      saveToLocal(investigation);
       if (isSupabaseConfigured() && !investigation.isDemoData) { saveInvestigation(investigation).catch(() => {}); }
+      // Add markers to globe
+      useGlobeStore.getState().addInvestigationMarkers(investigation);
       set((state) => ({ investigations: [investigation, ...state.investigations], currentInvestigation: investigation, isRunning: false, progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: new Date().toISOString() }, aiAssessment }));
     } catch (err) {
       console.error('Investigation error:', err);
@@ -215,21 +218,27 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
   startBatchInvestigation: async (_file: File) => {
     set({ isRunning: true, progress: { stage: 'parsing', progress: 5, message: 'Parsing batch file...', timestamp: new Date().toISOString() } });
     await new Promise((r) => setTimeout(r, 2000));
-    set({
-      progress: { stage: 'queued', progress: 10, message: '3 investigations queued for processing.', timestamp: new Date().toISOString() },
-    });
+    set({ progress: { stage: 'queued', progress: 10, message: '3 investigations queued for processing.', timestamp: new Date().toISOString() } });
     await new Promise((r) => setTimeout(r, 3000));
     set({ isRunning: false });
   },
 
   selectInvestigation: (id) => {
- const inv = get().investigations.find((i) => i.id === id);
+    const inv = get().investigations.find((i) => i.id === id);
     if (inv) {
       set({
         currentInvestigation: inv,
         aiAssessment: generateDemoAIAssessment(inv),
       });
     }
+  },
+
+  deleteInvestigation: (id) => {
+    deleteFromLocal(id);
+    set((state) => ({
+      investigations: state.investigations.filter(i => i.id !== id),
+      currentInvestigation: state.currentInvestigation?.id === id ? null : state.currentInvestigation,
+    }));
   },
 
   clearCurrent: () => set({ currentInvestigation: null, progress: null, aiAssessment: null }),
@@ -287,11 +296,24 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
     demoInvestigation.candidates = generateDemoCandidates(demoInvestigation.id);
     demoInvestigation.evidence = generateDemoEvidence(demoInvestigation.id);
     demoInvestigation.timeline = generateDemoTimeline(demoInvestigation.id);
+    saveToLocal(demoInvestigation);
+    useGlobeStore.getState().addInvestigationMarkers(demoInvestigation);
     set((state) => ({
       investigations: [demoInvestigation, ...state.investigations],
       currentInvestigation: demoInvestigation,
       aiAssessment: generateDemoAIAssessment(demoInvestigation),
     }));
+  },
+
+  loadPersistedInvestigations: () => {
+    const local = loadFromLocal();
+    if (local.length > 0) {
+      set((state) => {
+        const existing = new Set(state.investigations.map(i => i.id));
+        const newInvs = local.filter(i => !existing.has(i.id));
+        return { investigations: [...newInvs, ...state.investigations] };
+      });
+    }
   },
 }));
 
@@ -332,7 +354,8 @@ export const useAdminStore = create<AdminStore>((set) => ({
     { name: 'Google Find My Device', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
     { name: 'Samsung SmartThings', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
     { name: 'Custom/BYO Provider', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
-    { name: 'Web Search (Public)', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 320 },
+    { name: 'NumVerify', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 120 },
+    { name: 'Web Search (Serper)', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 320 },
     { name: 'Business Directory', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 180 },
   ],
   securityEvents: [
@@ -350,7 +373,8 @@ export const useAdminStore = create<AdminStore>((set) => ({
     { key: 'batch_investigations', isEnabled: true, config: { maxSize: 10 } },
     { key: 'ai_assistant', isEnabled: true, config: null },
     { key: '3d_globe', isEnabled: true, config: { autoRotate: true } },
-    { key: 'pdf_reports', isEnabled: false, config: null },
+    { key: 'pdf_reports', isEnabled: true, config: null },
+    { key: 'device_fingerprint', isEnabled: true, config: null },
   ],
   loadAdminData: () => {},
 }));
@@ -359,7 +383,7 @@ export const useAdminStore = create<AdminStore>((set) => ({
 // GLOBE STORE
 // ============================================================
 
-export const useGlobeStore = create<GlobeStore>((set) => ({
+export const useGlobeStore = create<GlobeStore>((set, get) => ({
   markers: [],
   arcs: [],
   focusedLocation: null,
@@ -369,57 +393,121 @@ export const useGlobeStore = create<GlobeStore>((set) => ({
   setArcs: (arcs) => set({ arcs }),
   focusLocation: (lat, lng) => set({ focusedLocation: { lat, lng } }),
   clearFocus: () => set({ focusedLocation: null }),
+
+  addInvestigationMarkers: (investigation: Investigation) => {
+    const newMarkers: GlobeMarker[] = [];
+    const newArcs: GlobeArc[] = [];
+
+    // Add candidate location markers
+    for (const candidate of investigation.candidates) {
+      if (candidate.location) {
+        // Try to extract a rough lat/lng from location name
+        const latlng = roughGeocode(candidate.location);
+        if (latlng) {
+          newMarkers.push({
+            id: `cand-${candidate.id}`,
+            lat: latlng.lat,
+            lng: latlng.lng,
+            label: candidate.name || candidate.location,
+            type: 'identity',
+            confidence: candidate.confidence,
+            investigationId: investigation.id,
+          });
+        }
+      }
+    }
+
+    // Add device location markers
+    for (const loc of investigation.locations) {
+      if (loc.latitude && loc.longitude) {
+        newMarkers.push({
+          id: `loc-${loc.id}`,
+          lat: loc.latitude,
+          lng: loc.longitude,
+          label: loc.address || loc.provider,
+          type: 'device',
+          confidence: undefined,
+          investigationId: investigation.id,
+        });
+      }
+    }
+
+    // Create arcs between markers
+    if (newMarkers.length >= 2) {
+      for (let i = 0; i < newMarkers.length - 1; i++) {
+        newArcs.push({
+          id: `arc-${investigation.id}-${i}`,
+          startLat: newMarkers[i].lat,
+          startLng: newMarkers[i].lng,
+          endLat: newMarkers[i + 1].lat,
+          endLng: newMarkers[i + 1].lng,
+          color: '#c8a24e',
+          animated: true,
+        });
+      }
+    }
+
+    if (newMarkers.length > 0) {
+      set((s) => ({
+        markers: [...newMarkers, ...s.markers],
+        arcs: [...newArcs, ...s.arcs],
+        focusedLocation: newMarkers[0] ? { lat: newMarkers[0].lat, lng: newMarkers[0].lng } : s.focusedLocation,
+      }));
+    }
+  },
 }));
 
-// Demo pipeline fallback when no API keys are configured
-async function runDemoPipeline(query: Record<string, string>, set: (fn: (state: any) => any) => void) {
-  const stages: Array<{ stage: string; message: string; progress: number }> = [
-    { stage: 'normalizing', message: 'Normalizing identifiers...', progress: 10 },
-    { stage: 'discovery', message: 'Discovering public sources...', progress: 25 },
-    { stage: 'searching', message: 'Searching public records...', progress: 40 },
-    { stage: 'correlating', message: 'Correlating identities...', progress: 55 },
-    { stage: 'evidence', message: 'Collecting and scoring evidence...', progress: 70 },
-    { stage: 'confidence', message: 'Calculating confidence scores...', progress: 90 },
-    { stage: 'completing', message: 'Generating report...', progress: 95 },
-  ];
-  for (const s of stages) {
-    await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
-    set({ progress: { stage: s.stage, progress: s.progress, message: s.message, timestamp: new Date().toISOString() } });
-  }
-  const now = new Date().toISOString();
-  const phone = query.phone || '';
-  const name = query.name || 'Unknown';
-  const country = query.country || 'US';
-  const demoInvestigation: Investigation = {
-    id: `inv-${Date.now()}`,
-    status: 'completed',
-    depth: (query.depth as Investigation['depth']) || 'standard',
-    isBatch: false, batchId: null,
-    inputPhone: phone,
-    inputPhoneNormalized: phone.startsWith('+') ? phone : `+1${phone.replace(/[^0-9]/g, '')}`,
-    inputEmail: query.email || null,
-    inputName: name, inputBusiness: null, inputRegion: null,
-    inputCountry: country, inputState: null, inputCity: null,
-    summary: `Investigation completed for ${name || phone || 'unknown identifier'}. ${Math.floor(Math.random() * 3) + 1} identity candidates found with varying confidence levels.`,
-    identityCount: Math.floor(Math.random() * 3) + 1,
-    evidenceCount: Math.floor(Math.random() * 8) + 5,
-    sourceCount: Math.floor(Math.random() * 6) + 4,
-    confidence: 78, hasConflicts: Math.random() > 0.6,
-    locationStatus: 'unavailable', isDemoData: true,
-    startedAt: new Date(Date.now() - 30000).toISOString(),
-    completedAt: now, createdAt: new Date(Date.now() - 35000).toISOString(), updatedAt: now,
-    candidates: [], evidence: [], locations: [], timeline: [],
+// Rough geocoding from location strings — uses known city coordinates
+function roughGeocode(location: string): { lat: number; lng: number } | null {
+  const cities: Record<string, { lat: number; lng: number }> = {
+    'san francisco': { lat: 37.7749, lng: -122.4194 },
+    'los angeles': { lat: 34.0522, lng: -118.2437 },
+    'new york': { lat: 40.7128, lng: -74.006 },
+    'london': { lat: 51.5074, lng: -0.1278 },
+    'berlin': { lat: 52.52, lng: 13.405 },
+    'paris': { lat: 48.8566, lng: 2.3522 },
+    'tokyo': { lat: 35.6762, lng: 139.6503 },
+    'sydney': { lat: -33.8688, lng: 151.2093 },
+    'dubai': { lat: 25.2048, lng: 55.2708 },
+    'lagos': { lat: 6.5244, lng: 3.3792 },
+    'singapore': { lat: 1.3521, lng: 103.8198 },
+    'mumbai': { lat: 19.076, lng: 72.8777 },
+    'toronto': { lat: 43.6532, lng: -79.3832 },
+    'chicago': { lat: 41.8781, lng: -87.6298 },
+    'houston': { lat: 29.7604, lng: -95.3698 },
+    'miami': { lat: 25.7617, lng: -80.1918 },
+    'seattle': { lat: 47.6062, lng: -122.3321 },
+    'austin': { lat: 30.2672, lng: -97.7431 },
+    'denver': { lat: 39.7392, lng: -104.9903 },
+    'atlanta': { lat: 33.749, lng: -84.388 },
+    'boston': { lat: 42.3601, lng: -71.0589 },
+    'dallas': { lat: 32.7767, lng: -96.797 },
+    'phoenix': { lat: 33.4484, lng: -112.074 },
+    'philadelphia': { lat: 39.9526, lng: -75.1652 },
+    'washington': { lat: 38.9072, lng: -77.0369 },
+    'nigeria': { lat: 9.082, lng: 8.6753 },
+    'germany': { lat: 51.1657, lng: 10.4515 },
+    'france': { lat: 46.6034, lng: 1.8883 },
+    'japan': { lat: 36.2048, lng: 138.2529 },
+    'india': { lat: 20.5937, lng: 78.9629 },
+    'brazil': { lat: -14.235, lng: -51.9253 },
+    'china': { lat: 35.8617, lng: 104.1954 },
+    'australia': { lat: -25.2744, lng: 133.7751 },
+    'canada': { lat: 56.1304, lng: -106.3468 },
+    'united states': { lat: 37.0902, lng: -95.7129 },
+    'uk': { lat: 55.3781, lng: -3.436 },
+    'united kingdom': { lat: 55.3781, lng: -3.436 },
+    'california': { lat: 36.7783, lng: -119.4179 },
+    'texas': { lat: 31.9686, lng: -99.9018 },
+    'new york': { lat: 43.2994, lng: -74.2179 },
+    'florida': { lat: 27.6648, lng: -81.5158 },
   };
-  demoInvestigation.candidates = generateDemoCandidates(demoInvestigation.id);
-  demoInvestigation.evidence = generateDemoEvidence(demoInvestigation.id);
-  demoInvestigation.timeline = generateDemoTimeline(demoInvestigation.id);
-  set((state: any) => ({
-    investigations: [demoInvestigation, ...state.investigations],
-    currentInvestigation: demoInvestigation,
-    isRunning: false,
-    progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: now },
-    aiAssessment: generateDemoAIAssessment(demoInvestigation),
-  }));
+
+  const lower = location.toLowerCase();
+  for (const [city, coords] of Object.entries(cities)) {
+    if (lower.includes(city)) return coords;
+  }
+  return null;
 }
 
 // ============================================================
