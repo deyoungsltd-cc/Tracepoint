@@ -1,6 +1,6 @@
 // ============================================================
 // TRACEPOINT — Database Setup API Route
-// Checks if the schema is applied, returns SQL if not.
+// Checks if the schema is applied, returns status.
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -13,44 +13,53 @@ export async function GET() {
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({
       configured: false,
-      error: 'Supabase credentials not set in .env.local',
+      tablesExist: false,
+      error: 'Supabase credentials not set in environment variables',
     });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { error } = await supabase.from('profiles').select('id').limit(1);
+    // Try a lightweight query — select from profiles
+    const { data, error } = await supabase.from('profiles').select('id').limit(1);
 
     if (!error) {
       return NextResponse.json({ configured: true, tablesExist: true });
     }
 
+    // Table doesn't exist
     if (error.message?.includes('does not exist') || error.code === '42P01') {
+      const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
       return NextResponse.json({
         configured: true,
         tablesExist: false,
         error: 'Database tables not found',
-        projectRef: supabaseUrl.split('//')[1].split('.')[0],
+        projectRef,
         instructions: [
           '1. Go to your Supabase Dashboard → SQL Editor',
           '2. Paste the contents of supabase-schema.sql',
           '3. Click Run',
-          '4. Then go to Authentication → Providers → Google and enable it',
         ],
       });
     }
 
-    if (error.message?.includes('API key') || error.code === 'PGRST301') {
+    // API key issue — the key is invalid or revoked
+    if (error.message?.includes('API key') || error.code === 'PGRST301' || error.message?.includes('Invalid')) {
       return NextResponse.json({
         configured: true,
         tablesExist: false,
-        error: `Invalid API key: ${error.message}`,
-        fix: 'Update NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local with the key from Supabase Dashboard > Settings > API',
+        error: `Invalid Supabase API key — the anon key in your environment variables doesn't match this project. Go to Supabase Dashboard > Settings > API and copy the correct anon (public) key.`,
+        fix: 'invalid_key',
       });
     }
 
-    return NextResponse.json({ configured: true, tablesExist: false, error: error.message });
+    // Other errors (RLS, permissions, etc.)
+    return NextResponse.json({
+      configured: true,
+      tablesExist: false,
+      error: error.message,
+    });
   } catch (err: any) {
     return NextResponse.json({ configured: false, error: err.message }, { status: 500 });
   }
