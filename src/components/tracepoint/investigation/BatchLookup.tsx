@@ -128,32 +128,31 @@ export function BatchLookup() {
 
       setEntries(prev => prev.map((e, idx) => idx === i ? { ...e, status: 'running' } : e));
 
-      try {
-        const phoneDigits = entry.phone.replace(/[^0-9]/g, '');
-        const normalized = entry.phone.startsWith('+') ? entry.phone : `+${phoneDigits}`;
+      const phoneDigits = entry.phone.replace(/[^0-9]/g, '');
+      const normalized = entry.phone.startsWith('+') ? entry.phone : `+${phoneDigits}`;
 
-        const success = await startInvestigation({
-          phone: entry.phone || undefined,
-          phoneNormalized: normalized || undefined,
-          email: entry.email || undefined,
-          depth,
-        });
+      const success = await startInvestigation({
+        phone: entry.phone || undefined,
+        phoneNormalized: normalized || undefined,
+        email: entry.email || undefined,
+        depth,
+      });
 
-        if (success) {
-          const latest = useInvestigationStore.getState().currentInvestigation;
-          if (latest) {
-            setEntries(prev => prev.map((e, idx) => idx === i ? {
-              ...e,
-              status: 'completed',
-              investigationId: latest.id,
-              confidence: latest.confidence || 0,
-              identities: latest.identityCount,
-              evidence: latest.evidenceCount,
-            } : e));
-          }
-        } else {
-          setEntries(prev => prev.map((e, idx) => idx === i ? { ...e, status: 'failed', error: 'Investigation failed' } : e));
+      if (success) {
+        const latest = useInvestigationStore.getState().currentInvestigation;
+        if (latest) {
+          setEntries(prev => prev.map((e, idx) => idx === i ? {
+            ...e,
+            status: 'completed',
+            investigationId: latest.id,
+            confidence: latest.confidence || 0,
+            identities: latest.identityCount,
+            evidence: latest.evidenceCount,
+          } : e));
         }
+      } else {
+        setEntries(prev => prev.map((e, idx) => idx === i ? { ...e, status: 'failed', error: 'Investigation failed' } : e));
+      }
 
       setProcessedCount(i + 1);
     }
