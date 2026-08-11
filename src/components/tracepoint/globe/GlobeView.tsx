@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useRef, useMemo, useEffect, useCallback } from 'react';
+import { Suspense, useRef, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, QuadraticBezierLine, Line } from '@react-three/drei';
 import * as THREE from 'three';
@@ -476,10 +476,8 @@ function GlobeLoadingFallback() {
 // Public Exports
 // ============================================================
 
-/** The lazy-loaded 3D globe scene. Wrap with <GlobeView /> for Suspense fallback. */
-export const GlobeScene = React.lazy(() =>
-  Promise.resolve({ default: GlobeSceneInner }),
-);
+/** The 3D globe scene. Wrap with <GlobeView /> for Suspense fallback. */
+export const GlobeScene = GlobeSceneInner;
 
 /** Wrapper component that provides the globe with a Suspense loading fallback. */
 export function GlobeView() {

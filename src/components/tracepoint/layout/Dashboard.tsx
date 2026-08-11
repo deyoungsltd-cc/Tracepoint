@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useEffect, Suspense, lazy } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useNavStore, useInvestigationStore, useGlobeStore, useAdminStore } from '@/lib/store/app';
 import { Crosshair, Clock, Activity, Globe2, BarChart3, Database, Shield, Zap, Layers } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { listInvestigations } from '@/lib/supabase/data';
 import dynamic from 'next/dynamic';
-import { useState, useEffect as useEff2 } from 'react';
 import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter';
 
 const GlobeView = dynamic(() => import('@/components/tracepoint/globe/GlobeView').then(m => ({ default: m.GlobeView })), { ssr: false });
@@ -76,7 +75,7 @@ function DashboardContent() {
   }, [loadPersistedInvestigations]);
 
   // Check DB setup status
-  useEff2(() => {
+  useEffect(() => {
     if (isSupabaseConfigured()) {
       fetch('/api/setup').then(r => r.json()).then(setDbStatus).catch(() => {});
     }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { GlobeMarker } from '@/lib/types';
+import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface MapLibreMapProps {
@@ -25,7 +26,7 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    const map = new (window as any).maplibregl.Map({
+    const map = new maplibregl.Map({
       container: mapContainer.current,
       style: {
         version: 8,
@@ -55,8 +56,8 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
       attributionControl: false,
     });
 
-    map.addControl(new (window as any).maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    map.addControl(new (window as any).maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
     mapRef.current = map;
 
@@ -82,7 +83,7 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
 
     if (markers.length === 0) return;
 
-    const bounds = new (window as any).maplibregl.LngLatBounds();
+    const bounds = new maplibregl.LngLatBounds();
 
     for (const marker of markers) {
       if (marker.lat == null || marker.lng == null) continue;
@@ -98,7 +99,7 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         cursor: pointer;
       `;
 
-      const popup = new (window as any).maplibregl.Popup({
+      const popup = new maplibregl.Popup({
         offset: 12,
         closeButton: false,
         className: 'tp-maplibre-popup',
@@ -110,7 +111,7 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         </div>`
       );
 
-      const mapMarker = new (window as any).maplibregl.Marker({ element: el })
+      const mapMarker = new maplibregl.Marker({ element: el })
         .setLngLat([marker.lng, marker.lat])
         .setPopup(popup)
         .addTo(map);

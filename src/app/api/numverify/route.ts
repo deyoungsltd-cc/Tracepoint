@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: 'NumVerify API key not configured' }, { status: 500 });
 
     const params = new URLSearchParams({ access_key: apiKey, number: phone });
-    const response = await fetch(`http://apilayer.net/api/validate?${params.toString()}`);
+    const response = await fetch(`https://apilayer.net/api/validate?${params.toString()}`);
 
     if (!response.ok) {
       console.error(`[NumVerify] ${response.status}: ${response.statusText}`);
