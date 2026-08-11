@@ -146,7 +146,7 @@ CONFIDENCE LEVELS:
 - LOW (20-49): Only phone validation or a single low-reliability source. This is the DEFAULT for phone-only lookups with no web results.
 - INSUFFICIENT (0-19): Not enough evidence to make any determination.
 
-CRITICAL: If the only evidence is phone number validation (e.g. NumVerify), the confidence MUST be LOW (20-49 range). Phone validation only confirms the number is registered to a carrier — it does NOT verify any identity. An 82%+ score requires at least 2-3 independent corroborating sources such as social profiles, business directories, or public records that link a specific person to the phone number.
+CRITICAL: If the only evidence is phone number validation (e.g. NumVerify), the confidence MUST be LOW (20-49 range). Phone validation only confirms the number is registered to a carrier — it does NOT verify any identity. An 82%+ score requires at least 2-3 independent corroborating sources such as social profiles, business directories, or public records that link a specific person to the phone number.`;
 
   const userPrompt = `Analyze the following identity investigation data:
 

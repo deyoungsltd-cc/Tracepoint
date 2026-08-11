@@ -15,6 +15,7 @@ const DevicesView = lazy(() => import('@/components/tracepoint/layout/DevicesVie
 const DeviceFingerprint = lazy(() => import('@/components/tracepoint/shared/DeviceFingerprint'));
 const SettingsView = lazy(() => import('@/components/tracepoint/layout/SettingsView'));
 const ReportsView = lazy(() => import('@/components/tracepoint/layout/ReportsView'));
+const WatchlistView = lazy(() => import('@/components/tracepoint/investigation/WatchlistView'));
 
 function Loading({ name }: { name: string }) {
   return (
@@ -73,6 +74,7 @@ function AppShell() {
               {currentView === 'device-fingerprint' && <DeviceFingerprint />}
               {currentView === 'settings' && <SettingsView />}
               {currentView === 'reports' && <ReportsView />}
+              {currentView === 'watchlist' && <WatchlistView />}
             </Suspense>
           </ViewErrorBoundary>
         </main>

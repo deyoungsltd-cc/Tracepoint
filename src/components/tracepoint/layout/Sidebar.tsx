@@ -6,7 +6,7 @@ import { useNavStore, useAuthStore } from '@/lib/store/app';
 import type { AppView } from '@/lib/types';
 import {
   Radar, Search, Clock, Smartphone, Shield, Settings, FileText, LayoutDashboard,
-  ChevronLeft, ChevronRight, LogOut, Crosshair, Database, Activity, Layers, Fingerprint,
+  ChevronLeft, ChevronRight, LogOut, Crosshair, Database, Activity, Layers, Fingerprint, Eye,
 } from 'lucide-react';
 
 interface NavItem {
@@ -21,6 +21,7 @@ const userNav: NavItem[] = [
   { view: 'investigation', label: 'Investigate', icon: Crosshair },
   { view: 'batch-lookup', label: 'Batch Lookup', icon: Layers },
   { view: 'history', label: 'History', icon: Clock },
+  { view: 'watchlist', label: 'Watchlist', icon: Eye },
   { view: 'devices', label: 'Devices', icon: Smartphone },
   { view: 'device-fingerprint', label: 'Fingerprint', icon: Fingerprint },
   { view: 'reports', label: 'Reports', icon: FileText },

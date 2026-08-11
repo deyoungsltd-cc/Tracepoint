@@ -31,7 +31,8 @@ export type SourceCategory =
   | 'professional_profile'
   | 'user_provided'
   | 'device_provider'
-  | 'web_search';
+  | 'web_search'
+  | 'phone_validation';
 
 export type UserRole = 'admin' | 'pro' | 'standard';
 
@@ -45,6 +46,7 @@ export type AppView =
   | 'history'
   | 'devices'
   | 'device-fingerprint'
+  | 'watchlist'
   | 'admin'
   | 'settings'
   | 'reports'
@@ -283,6 +285,11 @@ export interface AppSettings {
   aiModel: string;
   serperApiKey: string;
   numverifyApiKey: string;
+  twilioAccountSid: string;
+  twilioAuthToken: string;
+  cloudinaryCloudName: string;
+  cloudinaryApiKey: string;
+  cloudinaryApiSecret: string;
   mapboxToken: string;
   demoMode: boolean;
  batchMaxSize: number;

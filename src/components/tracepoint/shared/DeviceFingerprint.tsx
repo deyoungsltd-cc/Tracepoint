@@ -286,7 +286,7 @@ export function DeviceFingerprint() {
     try {
       fetch('https://api.ipify.org?format=json')
         .then(r => r.json())
-        .then(d => setData(prev => prev ? { ...prev, ip: safeStr(d.ip, null) as string | null : prev))
+        .then(d => setData(prev => prev ? { ...prev, ip: (d && typeof d.ip === 'string') ? d.ip : null } : prev))
         .catch(() => {});
     } catch {
       // IP detection is optional
