@@ -36,7 +36,8 @@ class GlobeErrorBoundary extends React.Component<React.PropsWithChildren, { hasE
 }
 
 function MapFallback() {
-  const markers = useGlobeStore.getState().markers;
+  // Use reactive subscription so markers update when investigation completes
+  const markers = useGlobeStore((s) => s.markers);
   return <MapLibreMap markers={markers} />;
 }
 
@@ -102,6 +103,8 @@ function DashboardContent() {
     if (isSupabaseConfigured()) {
       fetch('/api/setup').then(r => r.json()).then(setDbStatus).catch(() => {});
     }
+    // Load real provider health
+    adminStore.loadAdminData();
   }, []);
 
   useEffect(() => {
@@ -232,8 +235,8 @@ function DashboardContent() {
       </div>
 
       {/* Center: Map / Globe */}
-      <div className="flex-1 min-h-[300px] lg:min-h-0 relative">
-        <div className="globe-bg absolute inset-0 rounded-[var(--radius)] border border-border overflow-hidden">
+      <div className="flex-1 min-h-[300px] lg:min-h-0 relative" style={{ minHeight: '300px', height: 'calc(100vh - 80px)' }}>
+        <div className="globe-bg absolute inset-0 rounded-[var(--radius)] border border-border overflow-hidden" style={{ width: '100%', height: '100%' }}>
           {viewMode === 'globe' && (
             useFallbackMap ? (
               <MapLibreMap markers={markers} />

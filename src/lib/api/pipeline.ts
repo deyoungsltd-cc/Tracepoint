@@ -9,10 +9,13 @@
 //   3. Web Search (Serper)
 //   4. Social Profile Scraper
 //   5. Messaging OSINT (WhatsApp/Telegram/Signal)
-//   6. Identity Correlation
-//   7. Confidence Calculation
-//   8. AI Assessment (OpenAI GPT-4o)
-//   9. Finalize & Sanity Cap
+//   6. Business Association (web search for business ties)
+//   7. Public Presence (web search for public records / mentions)
+//   8. Location Enrichment (geocode from evidence)
+//   9. Identity Correlation
+//  10. Confidence Calculation
+//  11. AI Assessment (OpenAI GPT-4o)
+//  12. Finalize & Sanity Cap
 // ============================================================
 
 import type { Investigation, EvidenceItem, IdentityCandidate, TimelineEvent, AIAssessment } from '@/lib/types';
@@ -57,37 +60,47 @@ function uuid(): string {
 
 async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | null> {
   try {
+    const t0 = Date.now();
     const res = await fetch(`/api/numverify?phone=${encodeURIComponent(phone)}`);
+    const ms = Date.now() - t0;
     if (!res.ok) {
-      console.error(`[Pipeline] NumVerify API error: ${res.status}`);
+      const body = await res.text().catch(() => '');
+      console.error(`[Pipeline:Stage1] NumVerify API error ${res.status} (${ms}ms): ${body}`);
       return null;
     }
-    return await res.json();
+    const data = await res.json();
+    console.log(`[Pipeline:Stage1] NumVerify OK (${ms}ms), valid=${data.valid}`);
+    return data;
   } catch (err) {
-    console.error('[Pipeline] NumVerify fetch failed:', err);
+    console.error('[Pipeline:Stage1] NumVerify fetch failed:', err);
     return null;
   }
 }
 
 async function proxySerperSearch(query: string): Promise<Array<{ title: string; link: string; snippet: string }>> {
   try {
+    const t0 = Date.now();
     const res = await fetch('/api/serper', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
+    const ms = Date.now() - t0;
     if (!res.ok) {
-      console.error(`[Pipeline] Serper API error: ${res.status}`);
+      const body = await res.text().catch(() => '');
+      console.error(`[Pipeline:Stage3] Serper API error ${res.status} (${ms}ms): ${body}`);
       return [];
     }
     const data = await res.json();
-    return (data.organic || []).map((item: Record<string, unknown>) => ({
+    const results = (data.organic || []).map((item: Record<string, unknown>) => ({
       title: String(item.title || ''),
       link: String(item.link || ''),
       snippet: String(item.snippet || ''),
     }));
+    console.log(`[Pipeline:Stage3] Serper OK (${ms}ms), ${results.length} results for: ${query.substring(0, 60)}`);
+    return results;
   } catch (err) {
-    console.error('[Pipeline] Serper fetch failed:', err);
+    console.error('[Pipeline:Stage3] Serper fetch failed:', err);
     return [];
   }
 }
@@ -671,7 +684,312 @@ async function stageMessagingOSINT(config: PipelineConfig): Promise<{
   return { evidence, timeline, results };
 }
 
-// Stage 6: Correlate candidates from search results
+// Stage 6 (NEW): Business Association — search for business ties
+async function stageBusinessAssociation(
+  config: PipelineConfig,
+  candidates: { name: string | null }[],
+): Promise<{ evidence: EvidenceItem[]; timeline: TimelineEvent[] }> {
+  const evidence: EvidenceItem[] = [];
+  const timeline: TimelineEvent[] = [];
+
+  // Build search queries from known identities
+  const queries: string[] = [];
+  if (config.phoneNormalized) {
+    queries.push(`"${config.phoneNormalized.replace(/[^0-9+]/g, '')}" business OR company OR founder OR CEO OR director`);
+  }
+  for (const c of candidates) {
+    if (c.name) {
+      queries.push(`"${c.name}" LinkedIn OR business OR company OR "about"`);
+    }
+  }
+  if (config.email) {
+    queries.push(`"${config.email}" LinkedIn OR company OR business`);
+  }
+
+  if (queries.length === 0) return { evidence, timeline };
+
+  const maxQueries = config.depth === 'quick' ? 1 : Math.min(queries.length, 3);
+
+  for (let i = 0; i < maxQueries; i++) {
+    console.log(`[Pipeline:Stage6] Business search: ${queries[i].substring(0, 60)}`);
+    const results = await proxySerperSearch(queries[i]);
+    for (const r of results) {
+      // Filter for business-related results
+      const isBusiness = /business|company|founder|ceo|director|inc|llc|ltd|corp|startup|enterprise|firm|agency|group|partner/i.test(r.title + ' ' + r.snippet);
+      if (!isBusiness) continue;
+
+      evidence.push({
+        id: uuid(),
+        claim: r.title,
+        sourceName: (() => { try { return new URL(r.link).hostname.replace('www.', ''); } catch { return 'unknown'; } })(),
+        sourceType: 'business_directory',
+        sourceUrl: r.link,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: r.snippet,
+        reliabilityScore: evidenceReliability('business_directory'),
+        relevanceScore: 70,
+        freshnessScore: 60,
+        verificationStatus: 'possible',
+      });
+    }
+  }
+
+  if (evidence.length > 0) {
+    timeline.push({
+      id: uuid(),
+      eventType: 'business_association',
+      description: `Found ${evidence.length} business association(s)`,
+      metadata: { count: evidence.length },
+      timestamp: timestampNow(),
+    });
+  } else {
+    timeline.push({
+      id: uuid(),
+      eventType: 'business_association',
+      description: 'No business associations found',
+      metadata: null,
+      timestamp: timestampNow(),
+    });
+  }
+
+  return { evidence, timeline };
+}
+
+// Stage 7 (NEW): Public Presence — search for public records, news, mentions
+async function stagePublicPresence(
+  config: PipelineConfig,
+  candidates: { name: string | null }[],
+): Promise<{ evidence: EvidenceItem[]; timeline: TimelineEvent[] }> {
+  const evidence: EvidenceItem[] = [];
+  const timeline: TimelineEvent[] = [];
+
+  const queries: string[] = [];
+  if (config.phoneNormalized) {
+    queries.push(`"${config.phoneNormalized.replace(/[^0-9+]/g, '')}" news OR arrest OR court OR record OR filing`);
+  }
+  for (const c of candidates) {
+    if (c.name) {
+      queries.push(`"${c.name}" news OR public record OR court OR mention`);
+    }
+  }
+
+  if (queries.length === 0) return { evidence, timeline };
+
+  const maxQueries = config.depth === 'quick' ? 1 : Math.min(queries.length, 2);
+
+  for (let i = 0; i < maxQueries; i++) {
+    console.log(`[Pipeline:Stage7] Public presence search: ${queries[i].substring(0, 60)}`);
+    const results = await proxySerperSearch(queries[i]);
+    for (const r of results) {
+      const isPublicRecord = /news|court|record|filing|arrest|lawsuit|judgment|government|registry|public/i.test(r.title + ' ' + r.snippet);
+      if (!isPublicRecord) continue;
+
+      evidence.push({
+        id: uuid(),
+        claim: r.title,
+        sourceName: (() => { try { return new URL(r.link).hostname.replace('www.', ''); } catch { return 'unknown'; } })(),
+        sourceType: 'news',
+        sourceUrl: r.link,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: r.snippet,
+        reliabilityScore: evidenceReliability('news'),
+        relevanceScore: 65,
+        freshnessScore: 55,
+        verificationStatus: 'unverified',
+      });
+    }
+  }
+
+  if (evidence.length > 0) {
+    timeline.push({
+      id: uuid(),
+      eventType: 'public_presence',
+      description: `Found ${evidence.length} public record(s)/mention(s)`,
+      metadata: { count: evidence.length },
+      timestamp: timestampNow(),
+    });
+  }
+
+  return { evidence, timeline };
+}
+
+// Stage 8 (NEW): Location Enrichment — extract and enrich location data
+function stageLocationEnrichment(
+  allEvidence: EvidenceItem[],
+  phoneInfo: Record<string, unknown> | null,
+  candidates: IdentityCandidate[],
+): { locations: Investigation['locations']; evidence: EvidenceItem[]; timeline: TimelineEvent[] } {
+  const locations: Investigation['locations'] = [];
+  const evidence: EvidenceItem[] = [];
+  const timeline: TimelineEvent[] = [];
+
+  // 1. Extract location from NumVerify geolocation
+  if (phoneInfo && phoneInfo.valid) {
+    const lat = parseFloat(phoneInfo.latitude as string);
+    const lng = parseFloat(phoneInfo.longitude as string);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      locations.push({
+        id: `numverify-${uuid()}`,
+        deviceId: null,
+        provider: 'NumVerify Geolocation',
+        status: 'last_known',
+        latitude: lat,
+        longitude: lng,
+        accuracy: null,
+        address: String(phoneInfo.location || phoneInfo.country_name || ''),
+        timestamp: timestampNow(),
+        freshness: 'recent',
+        deviceStatus: null,
+        batteryLevel: null,
+        networkType: null,
+      });
+    }
+  }
+
+  // 2. Extract locations from evidence snippets
+  const locationPatterns = [
+    /(?:located in|based in|from|lives in)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)/g,
+    /([A-Z][a-z]+(?:\s[A-Z][a-z]+)*),\s*([A-Z]{2})/g,
+  ];
+
+  const seenLocations = new Set<string>();
+  for (const ev of allEvidence) {
+    const text = `${ev.claim || ''} ${ev.excerpt || ''}`;
+    for (const pattern of locationPatterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const locStr = match[0];
+        if (locStr.length > 3 && locStr.length < 50 && !seenLocations.has(locStr)) {
+          seenLocations.add(locStr);
+          // Try to geocode via roughGeocode
+          const geocoded = roughGeocode(locStr);
+          if (geocoded) {
+            locations.push({
+              id: `extracted-${uuid()}`,
+              deviceId: null,
+              provider: 'Evidence Extraction',
+              status: 'inferred',
+              latitude: geocoded.lat,
+              longitude: geocoded.lng,
+              accuracy: null,
+              address: locStr,
+              timestamp: timestampNow(),
+              freshness: 'unknown',
+              deviceStatus: null,
+              batteryLevel: null,
+              networkType: null,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Add candidate locations
+  for (const c of candidates) {
+    if (c.location) {
+      const geocoded = roughGeocode(c.location);
+      if (geocoded) {
+        locations.push({
+          id: `candidate-${c.id}`,
+          deviceId: null,
+          provider: 'Candidate Profile',
+          status: 'inferred',
+          latitude: geocoded.lat,
+          longitude: geocoded.lng,
+          accuracy: null,
+          address: c.location,
+          timestamp: timestampNow(),
+          freshness: 'unknown',
+          deviceStatus: null,
+          batteryLevel: null,
+          networkType: null,
+        });
+      }
+    }
+  }
+
+  if (locations.length > 0) {
+    timeline.push({
+      id: uuid(),
+      eventType: 'location_enrichment',
+      description: `Derived ${locations.length} location(s) from evidence`,
+      metadata: { count: locations.length },
+      timestamp: timestampNow(),
+    });
+    evidence.push({
+      id: uuid(),
+      claim: `${locations.length} location(s) identified: ${locations.map(l => l.address || 'unknown').join(', ')}`,
+      sourceName: 'Location Enrichment',
+      sourceType: 'web_search',
+      sourceUrl: null,
+      discoveredAt: timestampNow(),
+      publishedAt: null,
+      excerpt: locations.map(l => `${l.address} (${l.provider})`).join('; '),
+      reliabilityScore: 60,
+      relevanceScore: 65,
+      freshnessScore: 70,
+      verificationStatus: 'possible',
+    });
+  }
+
+  return { locations, evidence, timeline };
+}
+
+// Helper: inline rough geocode (same logic as store but available in pipeline)
+function roughGeocode(location: string): { lat: number; lng: number } | null {
+  const cities: Record<string, { lat: number; lng: number }> = {
+    'san francisco': { lat: 37.7749, lng: -122.4194 },
+    'los angeles': { lat: 34.0522, lng: -118.2437 },
+    'new york': { lat: 40.7128, lng: -74.006 },
+    'london': { lat: 51.5074, lng: -0.1278 },
+    'berlin': { lat: 52.52, lng: 13.405 },
+    'paris': { lat: 48.8566, lng: 2.3522 },
+    'tokyo': { lat: 35.6762, lng: 139.6503 },
+    'sydney': { lat: -33.8688, lng: 151.2093 },
+    'dubai': { lat: 25.2048, lng: 55.2708 },
+    'lagos': { lat: 6.5244, lng: 3.3792 },
+    'singapore': { lat: 1.3521, lng: 103.8198 },
+    'mumbai': { lat: 19.076, lng: 72.8777 },
+    'toronto': { lat: 43.6532, lng: -79.3832 },
+    'chicago': { lat: 41.8781, lng: -87.6298 },
+    'houston': { lat: 29.7604, lng: -95.3698 },
+    'miami': { lat: 25.7617, lng: -80.1918 },
+    'seattle': { lat: 47.6062, lng: -122.3321 },
+    'austin': { lat: 30.2672, lng: -97.7431 },
+    'denver': { lat: 39.7392, lng: -104.9903 },
+    'atlanta': { lat: 33.749, lng: -84.388 },
+    'boston': { lat: 42.3601, lng: -71.0589 },
+    'dallas': { lat: 32.7767, lng: -96.797 },
+    'phoenix': { lat: 33.4484, lng: -112.074 },
+    'philadelphia': { lat: 39.9526, lng: -75.1652 },
+    'washington': { lat: 38.9072, lng: -77.0369 },
+    'nigeria': { lat: 9.082, lng: 8.6753 },
+    'germany': { lat: 51.1657, lng: 10.4515 },
+    'france': { lat: 46.6034, lng: 1.8883 },
+    'japan': { lat: 36.2048, lng: 138.2529 },
+    'india': { lat: 20.5937, lng: 78.9629 },
+    'brazil': { lat: -14.235, lng: -51.9253 },
+    'china': { lat: 35.8617, lng: 104.1954 },
+    'australia': { lat: -25.2744, lng: 133.7751 },
+    'canada': { lat: 56.1304, lng: -106.3468 },
+    'united states': { lat: 37.0902, lng: -95.7129 },
+    'uk': { lat: 55.3781, lng: -3.436 },
+    'united kingdom': { lat: 55.3781, lng: -3.436 },
+    'california': { lat: 36.7783, lng: -119.4179 },
+    'texas': { lat: 31.9686, lng: -99.9018 },
+    'florida': { lat: 27.6648, lng: -81.5158 },
+  };
+  const lower = location.toLowerCase();
+  for (const [city, coords] of Object.entries(cities)) {
+    if (lower.includes(city)) return coords;
+  }
+  return null;
+}
+
+// Stage 9: Correlate candidates from search results
 function stageCorrelation(
   evidence: EvidenceItem[],
   phoneInfo: Record<string, unknown> | null,
@@ -850,9 +1168,11 @@ export async function runRealInvestigation(
 }> {
   const id = uuid();
   const now = timestampNow();
+  const pipelineStart = Date.now();
   const allEvidence: EvidenceItem[] = [];
   const allTimeline: TimelineEvent[] = [];
   let country = config.country || '';
+  console.log(`[Pipeline] === START investigation === phone=${config.phone}, email=${config.email}, depth=${config.depth}`);
 
   callbacks.onProgress('initializing', 'Initializing investigation...', 3);
   allTimeline.push({ id: uuid(), eventType: 'started', description: 'Investigation initiated', metadata: { phone: config.phone, email: config.email, depth: config.depth }, timestamp: now });
@@ -893,7 +1213,7 @@ export async function runRealInvestigation(
   allEvidence.push(...socialResult.evidence);
   allTimeline.push(...socialResult.timeline);
 
-  // --- Stage 5: Messaging OSINT (NEW, deep only) ---
+  // --- Stage 5: Messaging OSINT (deep only) ---
   callbacks.onProgress('messaging_check', 'Checking messaging platforms...', 52);
   const messagingResult = await stageMessagingOSINT(config);
   allEvidence.push(...messagingResult.evidence);
@@ -902,9 +1222,28 @@ export async function runRealInvestigation(
     allTimeline.push({ id: uuid(), eventType: 'info', description: 'No social profiles found in search results', metadata: null, timestamp: timestampNow() });
   }
 
-  // --- Stage 6: Identity Correlation ---
-  callbacks.onProgress('correlating', 'Correlating identities...', 62);
+  // --- Stage 6: Business Association (NEW) ---
+  callbacks.onProgress('business_check', 'Searching business associations...', 60);
+  // Need initial candidates for business search — do a quick correlation first
+  const preCandidates = stageCorrelation(allEvidence, phoneResult.phoneInfo, config).candidates;
+  const bizResult = await stageBusinessAssociation(config, preCandidates);
+  allEvidence.push(...bizResult.evidence);
+  allTimeline.push(...bizResult.timeline);
+
+  // --- Stage 7: Public Presence (NEW) ---
+  callbacks.onProgress('public_presence', 'Checking public records and mentions...', 68);
+  const pubResult = await stagePublicPresence(config, preCandidates);
+  allEvidence.push(...pubResult.evidence);
+  allTimeline.push(...pubResult.timeline);
+
+  // --- Stage 8: Location Enrichment (NEW) ---
+  callbacks.onProgress('location_enrichment', 'Enriching location data...', 74);
+  // Re-correlate with all evidence now (including business + public)
   const { candidates, updatedEvidence } = stageCorrelation(allEvidence, phoneResult.phoneInfo, config);
+  const locResult = stageLocationEnrichment(allEvidence, phoneResult.phoneInfo, candidates);
+  allEvidence.push(...locResult.evidence);
+  allTimeline.push(...locResult.timeline);
+  const enrichedLocations = locResult.locations;
 
   // Apply caller name from phone enrichment to candidates that have no name yet
   if (callerName) {
@@ -926,23 +1265,27 @@ export async function runRealInvestigation(
     candidate.verifiedStatus = candidate.confidence >= 80 ? 'verified' : candidate.confidence >= 50 ? 'possible' : 'unverified';
   }
 
-  // --- Stage 7: Confidence Calculation ---
-  callbacks.onProgress('confidence', 'Calculating confidence scores...', 72);
+  // --- Stage 10: Confidence Calculation ---
+  callbacks.onProgress('confidence', 'Calculating confidence scores...', 80);
   const phoneEvCount = allEvidence.filter(e => e.sourceType === 'phone_validation').length;
   const socialEvCount = allEvidence.filter(e => e.sourceType === 'social_profile').length;
   const messagingEvCount = allEvidence.filter(e => e.sourceType === 'messaging_osint').length;
+  const businessEvCount = allEvidence.filter(e => e.sourceType === 'business_directory').length;
+  const publicEvCount = allEvidence.filter(e => e.sourceType === 'news').length;
   const overallConfidence = candidates.length > 0
     ? clampScore(
         candidates[0].confidence * 0.7 +
         Math.min((candidates[0].evidence?.length || 0) * 4, 20) +
         (phoneEvCount > 0 ? 8 : 0) +
         (socialEvCount > 0 ? 5 : 0) +
-        (messagingEvCount > 0 ? 3 : 0)
+        (messagingEvCount > 0 ? 3 : 0) +
+        (businessEvCount > 0 ? 4 : 0) +
+        (publicEvCount > 0 ? 3 : 0)
       )
     : 0;
 
-  // --- Stage 8: AI Assessment (cached) ---
-  callbacks.onProgress('ai_analysis', 'Running AI analysis...', 85);
+  // --- Stage 11: AI Assessment (cached) ---
+  callbacks.onProgress('ai_analysis', 'Running AI analysis...', 88);
   const baseInvestigation: Investigation = {
     id,
     status: 'completed',
@@ -958,13 +1301,13 @@ export async function runRealInvestigation(
     inputCountry: country || null,
     inputState: null,
     inputCity: phoneResult.phoneInfo?.location ? String(phoneResult.phoneInfo.location) : null,
-    summary: `Investigation completed for ${config.phone || config.email || 'unknown identifier'}. ${candidates.length} identity candidate${candidates.length !== 1 ? 's' : ''} found. ${socialResult.profiles.length} social profile${socialResult.profiles.length !== 1 ? 's' : ''} scanned. ${messagingResult.results.length} messaging platform${messagingResult.results.length !== 1 ? 's' : ''} checked.`,
+    summary: `Investigation completed for ${config.phone || config.email || 'unknown identifier'}. ${candidates.length} identity candidate${candidates.length !== 1 ? 's' : ''} found. ${socialResult.profiles.length} social profile${socialResult.profiles.length !== 1 ? 's' : ''} scanned. ${messagingResult.results.length} messaging platform${messagingResult.results.length !== 1 ? 's' : ''} checked. ${businessEvCount} business association${businessEvCount !== 1 ? 's' : ''} found. ${publicEvCount} public record${publicEvCount !== 1 ? 's' : ''} found. ${enrichedLocations.length} location${enrichedLocations.length !== 1 ? 's' : ''} derived.`,
     identityCount: candidates.length,
     evidenceCount: allEvidence.length,
     sourceCount: new Set(allEvidence.map(e => e.sourceName)).size,
     confidence: overallConfidence,
     hasConflicts: allEvidence.some(e => e.verificationStatus === 'conflicting'),
-    locationStatus: 'unavailable',
+    locationStatus: enrichedLocations.length > 0 ? 'located' : 'unavailable',
     isDemoData: false,
     startedAt: now,
     completedAt: timestampNow(),
@@ -972,7 +1315,7 @@ export async function runRealInvestigation(
     updatedAt: timestampNow(),
     candidates,
     evidence: updatedEvidence,
-    locations: [],
+    locations: enrichedLocations,
     timeline: allTimeline,
   };
 
@@ -980,8 +1323,8 @@ export async function runRealInvestigation(
   allTimeline.push(...aiTimeline);
   baseInvestigation.timeline = allTimeline;
 
-  // --- Stage 9: Finalize ---
-  callbacks.onProgress('completing', 'Generating report...', 93);
+  // --- Stage 12: Finalize ---
+  callbacks.onProgress('completing', 'Generating report...', 95);
 
   if (aiAssessment) {
     // Sanity cap: AI sometimes over-estimates confidence with minimal evidence.
@@ -1006,31 +1349,7 @@ export async function runRealInvestigation(
     baseInvestigation.summary = aiAssessment.conclusion;
   }
 
-  // --- Extract geolocation from NumVerify for globe pins ---
-  if (phoneResult.phoneInfo && phoneResult.phoneInfo.valid) {
-    const lat = parseFloat(phoneResult.phoneInfo.latitude as string);
-    const lng = parseFloat(phoneResult.phoneInfo.longitude as string);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      baseInvestigation.locations.push({
-        id: `numverify-${id}`,
-        deviceId: null,
-        provider: 'NumVerify Geolocation',
-        status: 'last_known',
-        latitude: lat,
-        longitude: lng,
-        accuracy: null,
-        address: String(phoneResult.phoneInfo.location || phoneResult.phoneInfo.country_name || ''),
-        timestamp: timestampNow(),
-        freshness: 'recent',
-        deviceStatus: null,
-        batteryLevel: null,
-        networkType: null,
-      });
-      baseInvestigation.locationStatus = 'last_known';
-    }
-  }
-
-  // Final summary
+  // --- Final summary ---
   const warnings = allTimeline.filter(t => t.eventType === 'warning');
   if (warnings.length > 0) {
     allTimeline.push({
@@ -1043,6 +1362,8 @@ export async function runRealInvestigation(
   }
 
   callbacks.onProgress('completed', 'Investigation complete.', 100);
+  const elapsed = Date.now() - pipelineStart;
+  console.log(`[Pipeline] === END investigation === ${elapsed}ms, ${allEvidence.length} evidence, ${candidates.length} candidates, confidence=${baseInvestigation.confidence}`);
 
   return { investigation: baseInvestigation, aiAssessment };
 }

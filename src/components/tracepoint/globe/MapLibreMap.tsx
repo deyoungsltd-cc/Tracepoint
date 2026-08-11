@@ -22,52 +22,76 @@ const MARKER_COLORS: Record<string, string> = {
 export default function MapLibreMap({ markers, className = '' }: MapLibreMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!mapContainer.current || mapRef.current) return;
+    const container = mapContainer.current;
+    if (!container || mapRef.current) return;
 
-    const map = new maplibregl.Map({
-      container: mapContainer.current,
-      style: {
-        version: 8,
-        name: 'Tracepoint Dark',
-        sources: {
-          'osm-tiles': {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; OpenStreetMap contributors',
+    // Small delay to ensure container has dimensions (mobile flex layout timing)
+    const initDelay = setTimeout(() => {
+      if (!container) return;
+
+      try {
+        const map = new maplibregl.Map({
+          container,
+          style: {
+            version: 8,
+            name: 'Tracepoint Dark',
+            sources: {
+              'osm-tiles': {
+                type: 'raster',
+                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                tileSize: 256,
+                attribution: '&copy; OpenStreetMap contributors',
+              },
+            },
+            layers: [
+              {
+                id: 'osm-tiles-layer',
+                type: 'raster',
+                source: 'osm-tiles',
+                minzoom: 0,
+                maxzoom: 19,
+              },
+            ],
           },
-        },
-        layers: [
-          {
-            id: 'osm-tiles-layer',
-            type: 'raster',
-            source: 'osm-tiles',
-            minzoom: 0,
-            maxzoom: 19,
-          },
-        ],
-      },
-      center: [0, 20],
-      zoom: 2,
-      minZoom: 1,
-      maxZoom: 16,
-      attributionControl: false,
-    });
+          center: [0, 20],
+          zoom: 2,
+          minZoom: 1,
+          maxZoom: 16,
+          attributionControl: false,
+        });
 
-    // Fix mobile resize issue — force map to recalculate size after mount
-    setTimeout(() => map.resize(), 100);
-    window.addEventListener('resize', () => map.resize());
+        // Fix mobile resize issue — force map to recalculate size after load
+        map.on('load', () => {
+          setTimeout(() => { try { map.resize(); } catch {} }, 150);
+        });
+        const handleResize = () => { try { map.resize(); } catch {} };
+        window.addEventListener('resize', handleResize);
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+        map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+        map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
-    mapRef.current = map;
+        mapRef.current = map;
+
+        // Store cleanup for useEffect return
+        cleanupRef.current = () => {
+          window.removeEventListener('resize', handleResize);
+          try { map.remove(); } catch {}
+          mapRef.current = null;
+        };
+      } catch (err) {
+        console.error('[MapLibre] Failed to initialize map:', err);
+      }
+    }, 250);
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      clearTimeout(initDelay);
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
     };
   }, []);
 
@@ -156,7 +180,7 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         .maplibregl-ctrl-group button span { background: #cdd1c8 !important; }
         .maplibregl-map { width: 100% !important; height: 100% !important; }
       `}</style>
-      <div ref={mapContainer} className={className || 'w-full h-full'} style={{ minHeight: '280px' }} />
+      <div ref={mapContainer} className={className || 'w-full h-full'} style={{ minHeight: '280px', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }} />
     </>
   );
 }

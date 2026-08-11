@@ -187,7 +187,7 @@ export default function InvestigationWorkspace() {
             </div>
             {!isSupabaseConfigured() && (
               <p className="text-[10px] text-muted-foreground">
-                Supabase not configured — running in offline demo mode.
+                Supabase not configured — investigations will be saved to local storage only.
                 {!settings.aiApiKey && ' Add OpenAI API key in Settings for AI assessments.'}
               </p>
             )}

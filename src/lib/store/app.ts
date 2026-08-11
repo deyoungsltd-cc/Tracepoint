@@ -324,7 +324,31 @@ export const useAdminStore = create<AdminStore>((set) => ({
     { key: 'pdf_reports', isEnabled: true, config: null },
     { key: 'device_fingerprint', isEnabled: true, config: null },
   ],
-  loadAdminData: () => {},
+  loadAdminData: () => {
+    fetch('/api/health')
+      .then(r => r.json())
+      .then((data: { providers: Array<{ name: string; isConfigured: boolean; isHealthy: boolean; latencyMs: number | null }> }) => {
+        if (!data.providers) return;
+        set((state) => ({
+          providers: state.providers.map(p => {
+            const pn = p.name.toLowerCase();
+            const match = data.providers.find((h: any) => {
+              const n = h.name.toLowerCase();
+              return pn.includes(n) || n.includes(pn);
+            });
+            if (!match) return p;
+            return {
+              ...p,
+              isEnabled: match.isConfigured,
+              health: !match.isConfigured ? 'unconfigured' as const : match.isHealthy ? 'healthy' as const : 'degraded' as const,
+              lastChecked: new Date().toISOString(),
+              latencyMs: match.latencyMs,
+            };
+          }),
+        }));
+      })
+      .catch(() => {});
+  },
 }));
 
 // ============================================================
