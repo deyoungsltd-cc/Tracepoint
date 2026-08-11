@@ -272,8 +272,64 @@ async function stagePhoneEnrichment(
       if (mapped) country = mapped;
     }
 
-    // AbstractAPI doesn't provide caller name, so we skip that here.
-    // Twilio below can still add it if configured.
+    // AbstractAPI doesn't provide caller name on all plans.
+    // Phone Intelligence API may return caller_name and risk_score.
+    if (abstractResult.caller_name) {
+      callerName = abstractResult.caller_name;
+      timeline.push({
+        id: uuid(),
+        eventType: 'abstractphone_caller_name',
+        description: `Caller name: ${abstractResult.caller_name}`,
+        metadata: { name: abstractResult.caller_name },
+        timestamp: timestampNow(),
+      });
+      evidence.push({
+        id: uuid(),
+        claim: `Registered caller name for ${config.phoneNormalized} is "${abstractResult.caller_name}"`,
+        sourceName: `${provider} Caller Name`,
+        sourceType: 'phone_validation',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Caller Name: ${abstractResult.caller_name}`,
+        reliabilityScore: 80,
+        relevanceScore: 75,
+        freshnessScore: 99,
+        verificationStatus: 'possible',
+      });
+      if (!hasWebCandidates && !fallbackCandidateName) {
+        fallbackCandidateName = abstractResult.caller_name;
+      }
+    }
+
+    // Risk score (Phone Intelligence API feature)
+    if (abstractResult.risk_score !== undefined && abstractResult.risk_score !== null) {
+      const risk = abstractResult.risk_score;
+      const riskLevel = risk >= 75 ? 'HIGH' : risk >= 40 ? 'MEDIUM' : 'LOW';
+      timeline.push({
+        id: uuid(),
+        eventType: 'abstractphone_risk',
+        description: `Fraud risk score: ${risk}/100 (${riskLevel})`,
+        metadata: { score: risk, level: riskLevel },
+        timestamp: timestampNow(),
+      });
+      evidence.push({
+        id: uuid(),
+        claim: `Phone ${config.phoneNormalized} has a fraud risk score of ${risk}/100 (${riskLevel} risk)`,
+        sourceName: `${provider} Risk Analysis`,
+        sourceType: 'phone_validation',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Risk Score: ${risk}/100. ${risk >= 75 ? 'This number exhibits characteristics commonly associated with fraudulent activity.' : risk >= 40 ? 'This number has some risk indicators.' : 'This number appears to be low risk.'}`,
+        reliabilityScore: 80,
+        relevanceScore: risk >= 75 ? 80 : risk >= 40 ? 65 : 50,
+        freshnessScore: 99,
+        verificationStatus: 'verified',
+      });
+    }
+
+    // Twilio below can still add call forwarding if configured.
   } else {
     timeline.push({
       id: uuid(),

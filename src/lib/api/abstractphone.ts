@@ -1,7 +1,7 @@
 // ============================================================
-// TRACEPOINT — AbstractAPI Phone Validation Client
+// TRACEPOINT — AbstractAPI Phone Intelligence Client
 // Free alternative to Twilio Lookup.
-// https://www.abstractapi.com/phone-validation-api
+// https://www.abstractapi.com/phone-intelligence-api
 // ============================================================
 
 export interface AbstractPhoneResult {
@@ -20,16 +20,20 @@ export interface AbstractPhoneResult {
     prefix: string;
   };
   location: string;
-  type: string;           // mobile, landline, voip, toll_free, etc.
+  type: string;              // mobile, landline, voip, toll_free, premium_rate, etc.
   carrier: string;
-  connected: boolean;     // Is the phone currently connected/active?
+  connected: boolean;        // Is the phone currently connected/active?
   roaming: boolean | null;
   dialling_code: string | null;
+  // Phone Intelligence extras (may not always be present)
+  risk_score?: number;       // 0-100 fraud risk
+  is_sms_enabled?: boolean;
+  caller_name?: string;
 }
 
 /**
- * Look up a phone number via AbstractAPI (server-side proxy).
- * Returns enriched phone data: carrier, line type, location, connection status.
+ * Look up a phone number via AbstractAPI Phone Intelligence (server-side proxy).
+ * Returns enriched phone data: carrier, line type, location, connection status, risk score.
  */
 export async function lookupAbstractPhone(phone: string): Promise<AbstractPhoneResult | null> {
   try {
@@ -41,10 +45,6 @@ export async function lookupAbstractPhone(phone: string): Promise<AbstractPhoneR
 
     if (!res.ok) return null;
     const data = await res.json();
-
-    // The API returns the result nested under the phone number key
-    // e.g. { "+1234567890": { valid: true, carrier: "...", ... } }
-    // But our proxy extracts the inner object, so we just return data directly.
     return data as AbstractPhoneResult;
   } catch {
     return null;

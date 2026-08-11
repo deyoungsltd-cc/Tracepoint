@@ -1,7 +1,7 @@
 // ============================================================
-// TRACEPOINT — Server-side AbstractAPI Phone Validation Proxy
+// TRACEPOINT — Server-side AbstractAPI Phone Intelligence Proxy
 // Free alternative to Twilio Lookup (100 calls/month free).
-// https://www.abstractapi.com/phone-validation-api
+// Uses the Phone Intelligence endpoint for richer data.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -19,19 +19,15 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.ABSTRACT_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'AbstractAPI key not configured. Get a free key at https://www.abstractapi.com/phone-validation-api' },
+        { error: 'AbstractAPI key not configured' },
         { status: 500 }
       );
     }
 
-    const url = `https://phonevalidation.abstractapi.com/v1/?api_key=${apiKey}&phone=${encodeURIComponent(phone)}`;
+    // Phone Intelligence endpoint (richer than phone validation)
+    const url = `https://phoneintelligence.abstractapi.com/v1/?api_key=${apiKey}&phone=${encodeURIComponent(phone)}`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        // AbstractAPI doesn't need auth headers — key is in query param
-      },
-    });
+    const response = await fetch(url);
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
@@ -43,9 +39,6 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-
-    // AbstractAPI returns: { "phone": "...", "valid": true, "carrier": "...", ... }
-    // Pass through the full response
     return NextResponse.json(data);
   } catch (err) {
     console.error('[AbstractPhone] Error:', err);
