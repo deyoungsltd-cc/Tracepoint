@@ -11,6 +11,18 @@ import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter'
 const GlobeView = dynamic(() => import('@/components/tracepoint/globe/GlobeView').then(m => ({ default: m.GlobeView })), { ssr: false });
 const MapLibreMap = dynamic(() => import('@/components/tracepoint/globe/MapLibreMap'), { ssr: false });
 
+function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return /Mobi|Android.*Mobile|iPhone|iPod|iPad/i.test(navigator.userAgent) || window.innerWidth < 768;
+}
+
+function supportsWebGL(): boolean {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+  } catch { return false; }
+}
+
 class GlobeErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean; error?: string }> {
   state = { hasError: false, error: '' };
   static getDerivedStateFromError(e: any) { return { hasError: true, error: e?.message || 'WebGL not available' }; }
@@ -68,6 +80,14 @@ function DashboardContent() {
   const { markers, setMarkers, arcs, setArcs } = globe;
   const { navigate, viewMode } = nav;
   const [dbStatus, setDbStatus] = useState<DbSetupStatus | null>(null);
+  const [useFallbackMap, setUseFallbackMap] = useState(false);
+
+  // On mobile or low-WebGL devices, force 2D map
+  useEffect(() => {
+    if (isMobileDevice() || !supportsWebGL()) {
+      setUseFallbackMap(true);
+    }
+  }, []);
 
   // Load persisted investigations on mount
   useEffect(() => {
@@ -231,18 +251,22 @@ function DashboardContent() {
       <div className="flex-1 min-h-[300px] lg:min-h-0">
         <div className="globe-bg w-full h-full rounded-[var(--radius)] border border-border overflow-hidden relative">
           {viewMode === 'globe' && (
-            <GlobeErrorBoundary>
-              <Suspense fallback={
-                <div className="w-full h-full flex items-center justify-center data-grid-bg">
-                  <div className="text-center">
-                    <Globe2 className="w-5 h-5 text-[#c8a24e] mx-auto mb-2 animate-pulse" />
-                    <div className="mono-label">Initializing globe...</div>
+            useFallbackMap ? (
+              <MapLibreMap markers={markers} />
+            ) : (
+              <GlobeErrorBoundary>
+                <Suspense fallback={
+                  <div className="w-full h-full flex items-center justify-center data-grid-bg">
+                    <div className="text-center">
+                      <Globe2 className="w-5 h-5 text-[#c8a24e] mx-auto mb-2 animate-pulse" />
+                      <div className="mono-label">Initializing globe...</div>
+                    </div>
                   </div>
-                </div>
-              }>
-                <GlobeView />
-              </Suspense>
-            </GlobeErrorBoundary>
+                }>
+                  <GlobeView />
+                </Suspense>
+              </GlobeErrorBoundary>
+            )
           )}
           {viewMode === 'map2d' && (
             <MapLibreMap markers={markers} />

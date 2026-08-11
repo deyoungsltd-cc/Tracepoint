@@ -441,7 +441,24 @@ export async function runRealInvestigation(
   callbacks.onProgress('completing', 'Generating report...', 95);
 
   if (aiAssessment) {
-    baseInvestigation.confidence = aiAssessment.confidence.score;
+    // Sanity cap: AI sometimes over-estimates confidence with minimal evidence.
+    // If the only evidence source is phone_validation, cap confidence at 45.
+    const nonPhoneEvidence = allEvidence.filter(e => e.sourceType !== 'phone_validation');
+    const webEvidence = nonPhoneEvidence.filter(e => e.sourceType === 'web_search' && e.relevanceScore >= 60);
+    let aiScore = aiAssessment.confidence.score;
+    if (nonPhoneEvidence.length === 0 && webEvidence.length === 0) {
+      // Only phone validation — cap at LOW range
+      aiScore = Math.min(aiScore, 45);
+      aiAssessment.confidence.level = 'LOW';
+      aiAssessment.confidence.explanation = 'Only phone number validation was available. No web sources or public records linked a specific identity to this number. ' + (aiAssessment.confidence.explanation || '');
+    } else if (webEvidence.length < 2) {
+      // 0-1 relevant web results — cap at MODERATE
+      aiScore = Math.min(aiScore, 65);
+      if (aiAssessment.confidence.level === 'HIGH') {
+        aiAssessment.confidence.level = 'MODERATE';
+      }
+    }
+    baseInvestigation.confidence = aiScore;
     baseInvestigation.summary = aiAssessment.conclusion;
   }
 

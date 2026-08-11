@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Monitor, Smartphone, Globe, Shield, Wifi, Cpu, Clock, Fingerprint, Copy, Check } from 'lucide-react';
+import { Monitor, Smartphone, Globe, Shield, Wifi, Cpu, Clock, Fingerprint, Copy, Check, AlertTriangle } from 'lucide-react';
 
 interface FingerprintData {
   userAgent: string;
@@ -35,41 +35,48 @@ interface FingerprintData {
 }
 
 function parseBrowser(ua: string): { browser: string; version: string } {
-  if (ua.includes('Firefox/')) return { browser: 'Firefox', version: ua.split('Firefox/')[1]?.split(' ')[0] || '' };
-  if (ua.includes('Edg/')) return { browser: 'Edge', version: ua.split('Edg/')[1]?.split(' ')[0] || '' };
-  if (ua.includes('OPR/') || ua.includes('Opera/')) return { browser: 'Opera', version: (ua.split('OPR/')[1] || ua.split('Opera/')[1])?.split(' ')[0] || '' };
-  if (ua.includes('Chrome/')) return { browser: 'Chrome', version: ua.split('Chrome/')[1]?.split(' ')[0] || '' };
-  if (ua.includes('Safari/') && !ua.includes('Chrome')) return { browser: 'Safari', version: ua.split('Version/')[1]?.split(' ')[0] || '' };
+  try {
+    if (ua.includes('Firefox/')) return { browser: 'Firefox', version: ua.split('Firefox/')[1]?.split(' ')[0] || '' };
+    if (ua.includes('Edg/')) return { browser: 'Edge', version: ua.split('Edg/')[1]?.split(' ')[0] || '' };
+    if (ua.includes('OPR/') || ua.includes('Opera/')) return { browser: 'Opera', version: (ua.split('OPR/')[1] || ua.split('Opera/')[1])?.split(' ')[0] || '' };
+    if (ua.includes('Chrome/')) return { browser: 'Chrome', version: ua.split('Chrome/')[1]?.split(' ')[0] || '' };
+    if (ua.includes('Safari/') && !ua.includes('Chrome')) return { browser: 'Safari', version: ua.split('Version/')[1]?.split(' ')[0] || '' };
+  } catch {}
   return { browser: 'Unknown', version: '' };
 }
 
 function parseOS(ua: string): { os: string; version: string } {
-  if (ua.includes('Windows NT 10')) return { os: 'Windows', version: '10/11' };
-  if (ua.includes('Windows NT 6.3')) return { os: 'Windows', version: '8.1' };
-  if (ua.includes('Mac OS X')) {
-    const v = ua.match(/Mac OS X ([\d_.]+)/)?.[1]?.replace(/_/g, '.') || '';
-    return { os: 'macOS', version: v };
-  }
-  if (ua.includes('Linux')) return { os: 'Linux', version: '' };
-  if (ua.includes('Android')) {
-    const v = ua.match(/Android ([\d.]+)/)?.[1] || '';
-    return { os: 'Android', version: v };
-  }
-  if (ua.includes('iPhone') || ua.includes('iPad')) {
-    const v = ua.match(/OS ([\d_]+)/)?.[1]?.replace(/_/g, '.') || '';
-    return { os: 'iOS', version: v };
-  }
+  try {
+    if (ua.includes('Windows NT 10')) return { os: 'Windows', version: '10/11' };
+    if (ua.includes('Windows NT 6.3')) return { os: 'Windows', version: '8.1' };
+    if (ua.includes('Mac OS X')) {
+      const v = ua.match(/Mac OS X ([\d_.]+)/)?.[1]?.replace(/_/g, '.') || '';
+      return { os: 'macOS', version: v };
+    }
+    if (ua.includes('Linux')) return { os: 'Linux', version: '' };
+    if (ua.includes('Android')) {
+      const v = ua.match(/Android ([\d.]+)/)?.[1] || '';
+      return { os: 'Android', version: v };
+    }
+    if (ua.includes('iPhone') || ua.includes('iPad')) {
+      const v = ua.match(/OS ([\d_]+)/)?.[1]?.replace(/_/g, '.') || '';
+      return { os: 'iOS', version: v };
+    }
+  } catch {}
   return { os: 'Unknown', version: '' };
 }
 
 function detectDevice(ua: string): string {
-  if (/Mobi|Android.*Mobile|iPhone|iPod/.test(ua)) return 'Mobile';
-  if (/iPad|Android(?!.*Mobile)|Tablet/.test(ua)) return 'Tablet';
+  try {
+    if (/Mobi|Android.*Mobile|iPhone|iPod/.test(ua)) return 'Mobile';
+    if (/iPad|Android(?!.*Mobile)|Tablet/.test(ua)) return 'Tablet';
+  } catch {}
   return 'Desktop';
 }
 
 function getCanvasFingerprint(): string {
   try {
+    if (typeof document === 'undefined') return 'unavailable';
     const canvas = document.createElement('canvas');
     canvas.width = 200;
     canvas.height = 50;
@@ -80,9 +87,9 @@ function getCanvasFingerprint(): string {
     ctx.fillStyle = '#f60';
     ctx.fillRect(50, 1, 100, 30);
     ctx.fillStyle = '#069';
-    ctx.fillText('Tracepoint 🎯 fp', 2, 15);
+    ctx.fillText('Tracepoint fp', 2, 15);
     ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-    ctx.fillText('Tracepoint 🎯 fp', 4, 17);
+    ctx.fillText('Tracepoint fp', 4, 17);
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = 'rgb(255,0,255)';
     ctx.beginPath();
@@ -106,6 +113,7 @@ function getCanvasFingerprint(): string {
 
 function getWebGLFingerprint(): string {
   try {
+    if (typeof document === 'undefined') return 'unavailable';
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl) return 'unavailable';
@@ -126,10 +134,11 @@ function getWebGLFingerprint(): string {
 }
 
 function detectFonts(): string[] {
-  const baseFonts = ['monospace', 'sans-serif', 'serif'];
-  const testFonts = ['Arial', 'Verdana', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Trebuchet MS', 'Palatino', 'Lucida Console', 'Segoe UI', 'Roboto', 'Open Sans', 'Noto Sans'];
   const detected: string[] = [];
   try {
+    if (typeof document === 'undefined' || !document.body) return detected;
+    const baseFonts = ['monospace', 'sans-serif', 'serif'];
+    const testFonts = ['Arial', 'Verdana', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Trebuchet MS', 'Palatino', 'Lucida Console', 'Segoe UI', 'Roboto', 'Open Sans', 'Noto Sans'];
     const span = document.createElement('span');
     span.style.position = 'absolute';
     span.style.left = '-9999px';
@@ -137,103 +146,175 @@ function detectFonts(): string[] {
     span.textContent = 'mmmmmmmmmmlli';
     document.body.appendChild(span);
     for (const font of testFonts) {
-      for (const base of baseFonts) {
-        span.style.fontFamily = `'${font}', ${base}`;
-        const width = span.offsetWidth;
-        span.style.fontFamily = `${base}`;
-        const baseWidth = span.offsetWidth;
-        if (width !== baseWidth) {
-          detected.push(font);
-          break;
+      try {
+        for (const base of baseFonts) {
+          span.style.fontFamily = `'${font}', ${base}`;
+          const width = span.offsetWidth;
+          span.style.fontFamily = `${base}`;
+          const baseWidth = span.offsetWidth;
+          if (width !== baseWidth) {
+            detected.push(font);
+            break;
+          }
         }
+      } catch {
+        // skip individual font test failures
       }
     }
     document.body.removeChild(span);
-  } catch {}
+  } catch {
+    // font detection unavailable in this environment
+  }
   return detected;
 }
 
-function computeFingerprint(): { data: FingerprintData; hash: string } {
-  if (typeof navigator === 'undefined') {
-    return { data: null as unknown as FingerprintData, hash: '' };
+function safeStr(val: unknown, fallback: string = ''): string {
+  return typeof val === 'string' ? val : fallback;
+}
+
+function computeFingerprint(): { data: FingerprintData | null; hash: string } {
+  try {
+    if (typeof navigator === 'undefined' || typeof window === 'undefined' || typeof document === 'undefined') {
+      return { data: null, hash: '' };
+    }
+    const ua = safeStr(navigator.userAgent, '');
+    const { browser, version: browserVersion } = parseBrowser(ua);
+    const { os, version: osVersion } = parseOS(ua);
+    const nav = navigator as any;
+    const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
+
+    const canvasHash = getCanvasFingerprint();
+    const webglHash = getWebGLFingerprint();
+    const fonts = detectFonts();
+
+    let screenW = 0, screenH = 0, colorDepth = 0, pixelRatio = 1;
+    let innerW = 0, innerH = 0;
+    try { screenW = screen.width; screenH = screen.height; colorDepth = screen.colorDepth; } catch {}
+    try { pixelRatio = window.devicePixelRatio || 1; innerW = window.innerWidth; innerH = window.innerHeight; } catch {}
+
+    let timezone = 'Unknown';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+
+    const tzOffset = new Date().getTimezoneOffset();
+    const tzSign = tzOffset > 0 ? '-' : '+';
+    const absH = Math.abs(Math.floor(tzOffset / 60));
+    const absM = Math.abs(tzOffset % 60);
+    const timezoneOffset = `UTC${tzSign}${String(absH).padStart(2, '0')}:${String(absM).padStart(2, '0')}`;
+
+    const language = safeStr(navigator.language, 'unknown');
+    const languages = Array.isArray(navigator.languages) ? [...navigator.languages] : [language];
+    const cookiesEnabled = !!navigator.cookieEnabled;
+    const doNotTrack = navigator.doNotTrack === '1';
+    const online = !!navigator.onLine;
+    const connectionType = conn?.effectiveType ? String(conn.effectiveType) : 'unknown';
+    const cores = navigator.hardwareConcurrency || 0;
+    const memory = nav.deviceMemory || 0;
+    let touchSupport = false;
+    try { touchSupport = 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0; } catch {}
+    const platform = safeStr((navigator as any).platform, '');
+    const maxTouchPoints = navigator.maxTouchPoints || 0;
+
+    const fp: FingerprintData = {
+      userAgent: ua,
+      browser,
+      browserVersion,
+      os,
+      osVersion,
+      device: detectDevice(ua),
+      screenResolution: `${screenW}x${screenH}`,
+      viewportSize: `${innerW}x${innerH}`,
+      colorDepth,
+      pixelRatio,
+      timezone,
+      timezoneOffset,
+      language,
+      languages,
+      cookiesEnabled,
+      doNotTrack,
+      online,
+      connectionType,
+      cores,
+      memory,
+      touchSupport,
+      platform,
+      ip: null,
+      canvasHash,
+      webglHash,
+      fonts,
+      hardwareConcurrency: cores,
+      maxTouchPoints,
+    };
+
+    const raw = `${fp.browser}-${fp.os}-${fp.screenResolution}-${fp.timezone}-${fp.cores}-${fp.pixelRatio}-${fp.colorDepth}-${fp.language}-${fp.canvasHash}-${fp.webglHash}`;
+    let h = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const char = raw.charCodeAt(i);
+      h = ((h << 5) - h) + char;
+      h = h & h;
+    }
+    const hash = Math.abs(h).toString(16).padStart(8, '0').toUpperCase();
+
+    return { data: fp, hash };
+  } catch (err) {
+    console.error('[DeviceFingerprint] computeFingerprint error:', err);
+    return { data: null, hash: '' };
   }
-  const ua = navigator.userAgent;
-  const { browser, version: browserVersion } = parseBrowser(ua);
-  const { os, version: osVersion } = parseOS(ua);
-  const nav = navigator as any;
-  const conn = nav.connection || nav.mozConnection || nav.webkitConnection;
-
-  const canvasHash = getCanvasFingerprint();
-  const webglHash = getWebGLFingerprint();
-  const fonts = detectFonts();
-
-  const fp: FingerprintData = {
-    userAgent: ua,
-    browser,
-    browserVersion,
-    os,
-    osVersion,
-    device: detectDevice(ua),
-    screenResolution: `${screen.width}x${screen.height}`,
-    viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-    colorDepth: screen.colorDepth,
-    pixelRatio: window.devicePixelRatio,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    timezoneOffset: `UTC${new Date().getTimezoneOffset() > 0 ? '-' : '+'}${String(Math.abs(Math.floor(new Date().getTimezoneOffset() / 60))).padStart(2, '0')}:${String(Math.abs(new Date().getTimezoneOffset() % 60)).padStart(2, '0')}`,
-    language: navigator.language,
-    languages: [...navigator.languages],
-    cookiesEnabled: navigator.cookieEnabled,
-    doNotTrack: navigator.doNotTrack === '1',
-    online: navigator.onLine,
-    connectionType: conn?.effectiveType || 'unknown',
-    cores: navigator.hardwareConcurrency || 0,
-    memory: nav.deviceMemory || 0,
-    touchSupport: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
-    platform: navigator.platform || '',
-    ip: null,
-    canvasHash,
-    webglHash,
-    fonts,
-    hardwareConcurrency: navigator.hardwareConcurrency || 0,
-    maxTouchPoints: navigator.maxTouchPoints || 0,
-  };
-
-  const raw = `${fp.browser}-${fp.os}-${fp.screenResolution}-${fp.timezone}-${fp.cores}-${fp.pixelRatio}-${fp.colorDepth}-${fp.language}-${fp.canvasHash}-${fp.webglHash}`;
-  let h = 0;
-  for (let i = 0; i < raw.length; i++) {
-    const char = raw.charCodeAt(i);
-    h = ((h << 5) - h) + char;
-    h = h & h;
-  }
-  const hash = Math.abs(h).toString(16).padStart(8, '0').toUpperCase();
-
-  return { data: fp, hash };
 }
 
 export function DeviceFingerprint() {
   const [data, setData] = useState<FingerprintData | null>(null);
   const [hash, setHash] = useState('');
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const { data: fpData, hash: fpHash } = computeFingerprint();
-    setData(fpData);
-    setHash(fpHash);
+    try {
+      const result = computeFingerprint();
+      if (!result.data) {
+        setError('Fingerprint computation not available in this environment');
+        return;
+      }
+      setData(result.data);
+      setHash(result.hash);
+    } catch (err) {
+      console.error('[DeviceFingerprint] init error:', err);
+      setError('Failed to compute device fingerprint');
+    }
   }, []);
 
   useEffect(() => {
-    fetch('https://api.ipify.org?format=json')
-      .then(r => r.json())
-      .then(d => setData(prev => prev ? { ...prev, ip: d.ip } : prev))
-      .catch(() => {});
+    try {
+      fetch('https://api.ipify.org?format=json')
+        .then(r => r.json())
+        .then(d => setData(prev => prev ? { ...prev, ip: safeStr(d.ip, null) as string | null : prev))
+        .catch(() => {});
+    } catch {
+      // IP detection is optional
+    }
   }, []);
 
   const copyHash = useCallback(() => {
-    navigator.clipboard.writeText(`TP-${hash}`).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    try {
+      navigator.clipboard.writeText(`TP-${hash}`).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(() => {});
+    } catch {}
   }, [hash]);
+
+  if (error) {
+    return (
+      <div className="p-4 h-full overflow-y-auto">
+        <div className="max-w-4xl mx-auto">
+          <div className="surface p-6 text-center">
+            <AlertTriangle className="w-8 h-8 text-[#c8a24e] mx-auto mb-3" />
+            <p className="text-sm text-foreground">{error}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">This feature requires a modern browser with JavaScript enabled.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!data) {
     return (

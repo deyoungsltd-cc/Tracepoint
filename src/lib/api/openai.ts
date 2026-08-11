@@ -141,10 +141,12 @@ STRICT RULES:
 }
 
 CONFIDENCE LEVELS:
-- HIGH (80-100): Multiple independent, high-reliability sources corroborate the same identity.
-- MODERATE (50-79): Some supporting evidence but gaps or minor conflicts exist.
-- LOW (20-49): Limited or low-reliability evidence only.
-- INSUFFICIENT (0-19): Not enough evidence to make any determination.`;
+- HIGH (80-100): Multiple independent, high-reliability sources (web profiles, directories, news) corroborate the same identity. Phone validation ALONE does NOT qualify.
+- MODERATE (50-79): Some supporting evidence from multiple source types, but gaps or minor conflicts exist.
+- LOW (20-49): Only phone validation or a single low-reliability source. This is the DEFAULT for phone-only lookups with no web results.
+- INSUFFICIENT (0-19): Not enough evidence to make any determination.
+
+CRITICAL: If the only evidence is phone number validation (e.g. NumVerify), the confidence MUST be LOW (20-49 range). Phone validation only confirms the number is registered to a carrier — it does NOT verify any identity. An 82%+ score requires at least 2-3 independent corroborating sources such as social profiles, business directories, or public records that link a specific person to the phone number.
 
   const userPrompt = `Analyze the following identity investigation data:
 

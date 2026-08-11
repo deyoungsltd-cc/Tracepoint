@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, Suspense, lazy } from 'react';
+import React, { useEffect, Suspense, lazy, Component } from 'react';
 import { useNavStore, useAuthStore } from '@/lib/store/app';
 import { Sidebar } from '@/components/tracepoint/layout/Sidebar';
 import { Header } from '@/components/tracepoint/layout/Header';
@@ -24,6 +24,34 @@ function Loading({ name }: { name: string }) {
   );
 }
 
+class ViewErrorBoundary extends Component<React.PropsWithChildren, { hasError: boolean; error?: string }> {
+  state = { hasError: false, error: '' };
+  static getDerivedStateFromError(e: any) { return { hasError: true, error: e?.message || 'Unknown error' }; }
+  componentDidCatch(e: any) { console.error('[ViewErrorBoundary]', e); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <div className="w-10 h-10 rounded-full bg-[#b83a3a]/10 border border-[#b83a3a]/15 flex items-center justify-center mx-auto mb-3">
+              <span className="text-[#b83a3a] text-lg font-bold">!</span>
+            </div>
+            <p className="text-sm text-foreground mb-1">Something went wrong</p>
+            <p className="text-xs text-muted-foreground/60 mb-3">{this.state.error}</p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: '' }); }}
+              className="text-xs text-[#c8a24e] hover:text-foreground transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Standard app shell with sidebar + header
 function AppShell() {
   const { currentView, sidebarOpen } = useNavStore();
@@ -34,17 +62,19 @@ function AppShell() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header />
         <main className="flex-1 overflow-hidden">
-          <Suspense fallback={<Loading name={currentView} />}>
-            {currentView === 'dashboard' && <DashboardView />}
-            {currentView === 'investigation' && <InvestigationWorkspace />}
-            {currentView === 'investigation-detail' && <InvestigationDetail />}
-            {currentView === 'batch-lookup' && <BatchLookup />}
-            {currentView === 'history' && <HistoryView />}
-            {currentView === 'devices' && <DevicesView />}
-            {currentView === 'device-fingerprint' && <DeviceFingerprint />}
-            {currentView === 'settings' && <SettingsView />}
-            {currentView === 'reports' && <ReportsView />}
-          </Suspense>
+          <ViewErrorBoundary>
+            <Suspense fallback={<Loading name={currentView} />}>
+              {currentView === 'dashboard' && <DashboardView />}
+              {currentView === 'investigation' && <InvestigationWorkspace />}
+              {currentView === 'investigation-detail' && <InvestigationDetail />}
+              {currentView === 'batch-lookup' && <BatchLookup />}
+              {currentView === 'history' && <HistoryView />}
+              {currentView === 'devices' && <DevicesView />}
+              {currentView === 'device-fingerprint' && <DeviceFingerprint />}
+              {currentView === 'settings' && <SettingsView />}
+              {currentView === 'reports' && <ReportsView />}
+            </Suspense>
+          </ViewErrorBoundary>
         </main>
       </div>
     </div>
