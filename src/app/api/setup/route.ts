@@ -44,19 +44,20 @@ export async function GET() {
       });
     }
 
-    // RLS policy issue — table exists but policies are broken
+    // RLS policy issue — table exists but policies are broken (infinite recursion)
     if (error.message?.includes('infinite recursion') || error.message?.includes('policy')) {
       const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
       return NextResponse.json({
         configured: true,
         tablesExist: false,
-        error: 'RLS policy error — the table exists but row-level security policies have an infinite recursion. Fix the policies in Supabase SQL Editor.',
+        error: 'RLS policy error — infinite recursion detected. The table exists but the policies need fixing.',
         projectRef,
         fix: 'rls_policy',
+        sqlUrl: `https://supabase.com/dashboard/project/${projectRef}/sql`,
         instructions: [
           '1. Go to Supabase Dashboard → SQL Editor',
-          '2. Drop and recreate the policies (see supabase-schema.sql)',
-          '3. Or temporarily disable RLS: ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;',
+          '2. Run the fix-rls.sql script',
+          '3. Or run: DROP POLICY "Admins can view all profiles" ON public.profiles; CREATE POLICY "Public read access" ON public.profiles FOR SELECT USING (true);',
         ],
       });
     }

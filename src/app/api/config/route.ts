@@ -1,0 +1,31 @@
+// ============================================================
+// TRACEPOINT — API Configuration Status
+// Returns which API keys are configured (booleans only, no secrets).
+// Called by the UI to show setup warnings before investigations.
+// ============================================================
+
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  const config = {
+    numverify: !!process.env.NUMVERIFY_API_KEY,
+    abstractApi: !!process.env.ABSTRACT_API_KEY,
+    serper: !!(process.env.SERPER_API_KEY || process.env.NEXT_PUBLIC_SERPER_API_KEY),
+    openai: !!process.env.OPENAI_API_KEY,
+    supabase: !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    cloudinary: !!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    twilio: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+  };
+
+  const criticalKeys = ['numverify', 'serper', 'openai'] as const;
+  const missingCritical = criticalKeys.filter(k => !config[k]);
+
+  return NextResponse.json({
+    configured: config,
+    missingCritical,
+    ready: missingCritical.length === 0,
+    message: missingCritical.length > 0
+      ? `Missing API keys: ${missingCritical.join(', ')}. Set them in Netlify Environment Variables or .env.local.`
+      : 'All critical API keys are configured.',
+  });
+}

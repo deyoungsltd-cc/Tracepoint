@@ -72,6 +72,67 @@ function StatBlock({ label, value, sub, accent }: {
   );
 }
 
+// Map content rendered inside the map container (shared between mobile and desktop)
+function MapContent({ viewMode, useFallbackMap, markers }: { viewMode: string; useFallbackMap: boolean; markers: any[] }) {
+  return (
+    <>
+      {viewMode === 'globe' && (
+        useFallbackMap ? (
+          <MapLibreMap markers={markers} />
+        ) : (
+          <GlobeErrorBoundary>
+            <Suspense fallback={
+              <div className="w-full h-full flex items-center justify-center data-grid-bg">
+                <div className="text-center">
+                  <Globe2 className="w-5 h-5 text-[#c8a24e] mx-auto mb-2 animate-pulse" />
+                  <div className="mono-label">Initializing globe...</div>
+                </div>
+              </div>
+            }>
+              <GlobeView />
+            </Suspense>
+          </GlobeErrorBoundary>
+        )
+      )}
+      {viewMode === 'map2d' && (
+        <MapLibreMap markers={markers} />
+      )}
+      {viewMode === 'list' && (
+        <div className="w-full h-full overflow-auto p-3">
+          {markers.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground text-[10px] data-grid-bg h-full flex items-center justify-center">
+              <div>
+                <Globe2 className="w-6 h-6 text-muted-foreground/10 mx-auto mb-2" />
+                No markers to display
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {markers.map((m) => (
+                <div key={m.id} className="surface p-2 flex justify-between items-center">
+                  <div>
+                    <div className="text-[11px] text-foreground">{m.label}</div>
+                    <div className="text-[9px] font-mono text-muted-foreground">{m.lat.toFixed(4)}, {m.lng.toFixed(4)}</div>
+                  </div>
+                  <span className="mono-value text-[10px]">{m.confidence}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {viewMode === 'evidence' && (
+        <div className="w-full h-full flex items-center justify-center data-grid-bg">
+          <div className="text-center">
+            <BarChart3 className="w-8 h-8 text-muted-foreground/8 mx-auto mb-2" />
+            <p className="text-[10px] text-muted-foreground">Evidence matrix — run an investigation to populate</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function DashboardContent() {
   const nav = useNavStore();
   const invStore = useInvestigationStore();
@@ -221,17 +282,28 @@ function DashboardContent() {
           <div className="mt-1.5 p-1.5 rounded bg-[#c8a24e]/4 border border-[#c8a24e]/10">
             <p className="text-[9px] text-[#c8a24e]/80 mb-1">
               {dbStatus?.fix === 'rls_policy'
-                ? 'RLS policy error in Supabase — fix in SQL Editor'
+                ? 'RLS policy error — click below to auto-fix'
                 : 'Run schema in Supabase SQL Editor'}
             </p>
-            <a
-              href={`https://supabase.com/dashboard/project/${dbStatus?.projectRef}/sql`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[9px] text-[#c8a24e] underline hover:text-foreground transition-colors"
-            >
-              Open SQL Editor →
-            </a>
+            {dbStatus?.fix === 'rls_policy' ? (
+              <button
+                onClick={() => fetch('/api/setup/fix-rls', { method: 'POST' }).then(r => r.json()).then(d => {
+                  if (d.success) setDbStatus({ configured: true, tablesExist: true });
+                })}
+                className="text-[9px] text-[#c8a24e] underline hover:text-foreground transition-colors"
+              >
+                Auto-fix RLS Policies →
+              </button>
+            ) : (
+              <a
+                href={`https://supabase.com/dashboard/project/${dbStatus?.projectRef}/sql`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[9px] text-[#c8a24e] underline hover:text-foreground transition-colors"
+              >
+                Open SQL Editor →
+              </a>
+            )}
           </div>
         )}
       </div>
@@ -292,86 +364,34 @@ function DashboardContent() {
     </>
   );
 
-  // ========== MOBILE LAYOUT: Map takes full width/height, panels are bottom sheets ==========
+  // ========== MOBILE LAYOUT ==========
   if (isMobile) {
     return (
-      <div className="flex flex-col h-full w-full">
-        {/* Map / Globe fills entire space */}
-        <div className="flex-1 relative min-h-0">
-          <div className="globe-bg absolute inset-0 rounded-[var(--radius)] border border-border overflow-hidden">
-            {viewMode === 'globe' && (
-              useFallbackMap ? (
-                <MapLibreMap markers={markers} />
-              ) : (
-                <GlobeErrorBoundary>
-                  <Suspense fallback={
-                    <div className="w-full h-full flex items-center justify-center data-grid-bg">
-                      <div className="text-center">
-                        <Globe2 className="w-5 h-5 text-[#c8a24e] mx-auto mb-2 animate-pulse" />
-                        <div className="mono-label">Initializing globe...</div>
-                      </div>
-                    </div>
-                  }>
-                    <GlobeView />
-                  </Suspense>
-                </GlobeErrorBoundary>
-              )
-            )}
-            {viewMode === 'map2d' && (
-              <MapLibreMap markers={markers} />
-            )}
-            {viewMode === 'list' && (
-              <div className="w-full h-full overflow-auto p-3">
-                {markers.length === 0 ? (
-                  <div className="text-center py-10 text-muted-foreground text-[10px] data-grid-bg h-full flex items-center justify-center">
-                    <div>
-                      <Globe2 className="w-6 h-6 text-muted-foreground/10 mx-auto mb-2" />
-                      No markers to display
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    {markers.map((m) => (
-                      <div key={m.id} className="surface p-2 flex justify-between items-center">
-                        <div>
-                          <div className="text-[11px] text-foreground">{m.label}</div>
-                          <div className="text-[9px] font-mono text-muted-foreground">{m.lat.toFixed(4)}, {m.lng.toFixed(4)}</div>
-                        </div>
-                        <span className="mono-value text-[10px]">{m.confidence}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            {viewMode === 'evidence' && (
-              <div className="w-full h-full flex items-center justify-center data-grid-bg">
-                <div className="text-center">
-                  <BarChart3 className="w-8 h-8 text-muted-foreground/8 mx-auto mb-2" />
-                  <p className="text-[10px] text-muted-foreground">Evidence matrix — run an investigation to populate</p>
-                </div>
-              </div>
-            )}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Map / Globe — takes all available space */}
+        <div style={{ flex: '1 1 0%', minHeight: 0, position: 'relative' }}>
+          <div className="globe-bg" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+            <MapContent viewMode={viewMode} useFallbackMap={useFallbackMap} markers={markers} />
           </div>
         </div>
 
         {/* Mobile bottom action bar */}
-        <div className="shrink-0 flex gap-1.5 p-2 border-t border-border bg-background/90 backdrop-blur-sm">
+        <div style={{ flexShrink: 0, display: 'flex', gap: '6px', padding: '8px', borderTop: '1px solid var(--border)', background: 'var(--background)' }}>
           <button
             onClick={() => navigate('investigation')}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded text-[11px] font-medium border border-[#c8a24e]/20 bg-[#c8a24e]/6 text-[#c8a24e]"
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px', borderRadius: 'var(--radius)', fontSize: '11px', fontWeight: 500, border: '1px solid rgba(200,162,78,0.2)', background: 'rgba(200,162,78,0.04)', color: '#c8a24e' }}
           >
             <Crosshair className="w-3 h-3" /> New
           </button>
           <button
             onClick={() => setShowMobilePanel(showMobilePanel === 'left' ? null : 'left')}
-            className="flex items-center justify-center gap-1 px-3 py-2 rounded text-[11px] text-muted-foreground border border-border"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '8px 12px', borderRadius: 'var(--radius)', fontSize: '11px', color: 'var(--muted-foreground)', border: '1px solid var(--border)', background: 'transparent' }}
           >
             <Activity className="w-3 h-3" /> Stats
           </button>
           <button
             onClick={() => setShowMobilePanel(showMobilePanel === 'right' ? null : 'right')}
-            className="flex items-center justify-center gap-1 px-3 py-2 rounded text-[11px] text-muted-foreground border border-border"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '8px 12px', borderRadius: 'var(--radius)', fontSize: '11px', color: 'var(--muted-foreground)', border: '1px solid var(--border)', background: 'transparent' }}
           >
             <Clock className="w-3 h-3" /> History
           </button>
@@ -379,8 +399,8 @@ function DashboardContent() {
 
         {/* Mobile slide-up panel */}
         {showMobilePanel && (
-          <div className="shrink-0 max-h-[50vh] overflow-y-auto p-2.5 border-t border-border bg-background flex flex-col gap-2.5 animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between">
+          <div style={{ flexShrink: 0, maxHeight: '50vh', overflowY: 'auto', padding: '10px', borderTop: '1px solid var(--border)', background: 'var(--background)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className="mono-label">{showMobilePanel === 'left' ? 'Stats & Providers' : 'Recent Investigations'}</span>
               <button onClick={() => setShowMobilePanel(null)} className="text-muted-foreground hover:text-foreground">
                 <ChevronDown className="w-4 h-4" />
@@ -404,59 +424,7 @@ function DashboardContent() {
       {/* Center: Map / Globe */}
       <div className="flex-1 min-h-[300px] lg:min-h-0 relative">
         <div className="globe-bg absolute inset-0 rounded-[var(--radius)] border border-border overflow-hidden">
-          {viewMode === 'globe' && (
-            useFallbackMap ? (
-              <MapLibreMap markers={markers} />
-            ) : (
-              <GlobeErrorBoundary>
-                <Suspense fallback={
-                  <div className="w-full h-full flex items-center justify-center data-grid-bg">
-                    <div className="text-center">
-                      <Globe2 className="w-5 h-5 text-[#c8a24e] mx-auto mb-2 animate-pulse" />
-                      <div className="mono-label">Initializing globe...</div>
-                    </div>
-                  </div>
-                }>
-                  <GlobeView />
-                </Suspense>
-              </GlobeErrorBoundary>
-            )
-          )}
-          {viewMode === 'map2d' && (
-            <MapLibreMap markers={markers} />
-          )}
-          {viewMode === 'list' && (
-            <div className="w-full h-full overflow-auto p-3">
-              {markers.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground text-[10px] data-grid-bg h-full flex items-center justify-center">
-                  <div>
-                    <Globe2 className="w-6 h-6 text-muted-foreground/10 mx-auto mb-2" />
-                    No markers to display
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {markers.map((m) => (
-                    <div key={m.id} className="surface p-2 flex justify-between items-center">
-                      <div>
-                        <div className="text-[11px] text-foreground">{m.label}</div>
-                        <div className="text-[9px] font-mono text-muted-foreground">{m.lat.toFixed(4)}, {m.lng.toFixed(4)}</div>
-                      </div>
-                      <span className="mono-value text-[10px]">{m.confidence}%</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {viewMode === 'evidence' && (
-            <div className="w-full h-full flex items-center justify-center data-grid-bg">
-              <div className="text-center">
-                <BarChart3 className="w-8 h-8 text-muted-foreground/8 mx-auto mb-2" />
-                <p className="text-[10px] text-muted-foreground">Evidence matrix — run an investigation to populate</p>
-              </div>
-            </div>
-          )}
+          <MapContent viewMode={viewMode} useFallbackMap={useFallbackMap} markers={markers} />
         </div>
       </div>
 

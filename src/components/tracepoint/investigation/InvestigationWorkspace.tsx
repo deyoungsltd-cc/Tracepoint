@@ -2,11 +2,18 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useInvestigationStore, useNavStore, useSettingsStore } from '@/lib/store/app';
-import { Crosshair, Upload, Zap, Target, Shield, Globe, ChevronDown } from 'lucide-react';
+import { Crosshair, Upload, Zap, Target, Shield, Globe, ChevronDown, AlertTriangle, Settings, Key } from 'lucide-react';
 import type { InvestigationDepth } from '@/lib/types';
 import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { saveInvestigation } from '@/lib/supabase/data';
+
+interface ApiConfigStatus {
+  configured: Record<string, boolean>;
+  missingCritical: string[];
+  ready: boolean;
+  message: string;
+}
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -47,6 +54,16 @@ const countryNames: Record<string, string> = {
   AU: 'Australia', ZA: 'South Africa', EG: 'Egypt', AE: 'UAE', SA: 'Saudi Arabia',
 };
 
+const keyLabels: Record<string, string> = {
+  numverify: 'NumVerify (Phone Validation)',
+  abstractApi: 'AbstractAPI (Phone Enrichment)',
+  serper: 'Serper (Web Search)',
+  openai: 'OpenAI (AI Analysis)',
+  supabase: 'Supabase (Database)',
+  cloudinary: 'Cloudinary (Image AI)',
+  twilio: 'Twilio (Caller ID)',
+};
+
 const depths: Array<{ value: InvestigationDepth; label: string; desc: string; icon: React.ElementType }> = [
   { value: 'quick', label: 'Quick', desc: '~30s', icon: Zap },
   { value: 'standard', label: 'Standard', desc: '~2min', icon: Target },
@@ -61,6 +78,8 @@ export default function InvestigationWorkspace() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [depth, setDepth] = useState<InvestigationDepth>('standard');
+  const [apiConfig, setApiConfig] = useState<ApiConfigStatus | null>(null);
+  const [showConfigDetails, setShowConfigDetails] = useState(false);
 
   const normalizedPhone = phone ? normalizePhone(phone) : '';
   const detectedCountryCode = phone ? getCountryFromPhone(phone) : '';
@@ -68,6 +87,14 @@ export default function InvestigationWorkspace() {
 
   const [hasPhone, hasEmail] = [!!phone.trim(), !!email.trim()];
   const canSubmit = hasPhone || hasEmail;
+
+  // Check API configuration on mount
+  useEffect(() => {
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(setApiConfig)
+      .catch(() => {});
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,6 +128,59 @@ export default function InvestigationWorkspace() {
           <h2 className="text-base font-semibold text-foreground">New Investigation</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Enter a phone number and/or email. Country is auto-detected.</p>
         </div>
+
+        {/* API Configuration Warning — shown BEFORE starting */}
+        {apiConfig && !apiConfig.ready && !isRunning && !isCompleted && (
+          <div className="mb-4 p-4 rounded border border-[#c8a24e]/25 bg-[#c8a24e]/5">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#c8a24e]/10 border border-[#c8a24e]/20 flex items-center justify-center shrink-0">
+                <Key className="w-3.5 h-3.5 text-[#c8a24e]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#c8a24e]">API Keys Required</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Investigations require API keys to fetch real data. The following providers are not configured:
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {apiConfig.missingCritical.map((key) => (
+                    <span key={key} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[#b83a3a]/8 border border-[#b83a3a]/15 text-[#b83a3a]">
+                      <AlertTriangle className="w-2.5 h-2.5" />
+                      {keyLabels[key] || key}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowConfigDetails(!showConfigDetails)}
+                  className="mt-2 text-[10px] text-[#c8a24e]/70 hover:text-[#c8a24e] transition-colors flex items-center gap-1"
+                >
+                  <ChevronDown className={`w-2.5 h-2.5 transition-transform ${showConfigDetails ? 'rotate-180' : ''}`} />
+                  {showConfigDetails ? 'Hide' : 'Show'} all provider status
+                </button>
+                {showConfigDetails && (
+                  <div className="mt-2 space-y-1">
+                    {Object.entries(apiConfig.configured).map(([key, configured]) => (
+                      <div key={key} className="flex items-center justify-between text-[10px]">
+                        <span className="text-muted-foreground">{keyLabels[key] || key}</span>
+                        <span className={configured ? 'text-[#4a9e5a]' : 'text-[#b83a3a]'}>
+                          {configured ? 'CONFIGURED' : 'MISSING'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 p-2 rounded bg-background/60 border border-border">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <strong className="text-foreground">To fix:</strong>{' '}
+                    Go to <button onClick={() => navigate('settings')} className="text-[#c8a24e] underline hover:text-foreground">Settings</button>{' '}
+                    or set environment variables in{' '}
+                    <code className="text-[9px] bg-accent px-1 rounded">.env.local</code> (local) or{' '}
+                    <code className="text-[9px] bg-accent px-1 rounded">Netlify → Site Settings → Environment</code> (production).
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Input Form */}
         {!isCompleted && !isRunning && (
