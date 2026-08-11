@@ -244,11 +244,14 @@ export function downloadReport(inv: Investigation, ai: AIAssessment | null) {
   const html = generateInvestigationReport(inv, ai);
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `tracepoint-report-${inv.inputPhone?.replace(/[^0-9]/g, '') || inv.inputEmail?.replace(/@/g, '_at_') || inv.id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    // Trigger print dialog after content loads
+    win.onload = () => {
+      win.print();
+    };
+  }
   URL.revokeObjectURL(url);
 }

@@ -7,7 +7,7 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
 import { getProfile } from '@/lib/supabase/data';
 
 export default function AuthView() {
-  const { setDemoMode, isLoading } = useAuthStore();
+  const { setDemoMode, login, isLoading } = useAuthStore();
   const { navigate } = useNavStore();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');

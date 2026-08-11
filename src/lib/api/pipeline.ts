@@ -243,23 +243,37 @@ function stageCorrelation(
     candidate.evidence.push(ev);
   }
 
-  if (candidateMap.size === 0 && phoneInfo && phoneInfo.valid) {
-    const candidate: IdentityCandidate = {
-      id: uuid(),
-      rank: 1,
-      name: config.email ? config.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null,
-      phone: String(phoneInfo.international_format || ''),
-      email: config.email || null,
-      business: null,
-      website: null,
-      location: String(phoneInfo.location || phoneInfo.country_name || ''),
-      photoUrl: null,
-      confidence: 25,
-      verifiedStatus: 'unverified',
-      matchFields: ['phone'],
-      evidence: [],
-    };
-    return { candidates: [candidate], updatedEvidence: evidence };
+  if (candidateMap.size === 0) {
+    const phoneEvidence = evidence.filter(e => e.sourceType === 'phone_validation');
+    const phoneValid = phoneInfo && phoneInfo.valid;
+
+    if (phoneValid || config.email) {
+      const candidate: IdentityCandidate = {
+        id: uuid(),
+        rank: 1,
+        name: config.email ? config.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null,
+        phone: phoneValid ? String(phoneInfo.international_format || '') : (config.phoneNormalized || null),
+        email: config.email || null,
+        business: null,
+        website: null,
+        location: phoneValid ? String(phoneInfo.location || phoneInfo.country_name || '') : null,
+        photoUrl: null,
+        confidence: phoneValid ? 55 : 35,
+        verifiedStatus: phoneValid ? 'possible' : 'unverified',
+        matchFields: [...(phoneValid ? ['phone'] : []), ...(config.email ? ['email'] : [])],
+        evidence: [],
+      };
+
+      // Link phone validation evidence to this candidate
+      for (const ev of phoneEvidence) {
+        ev.candidateId = candidate.id;
+        candidate.evidence.push(ev);
+      }
+
+      return { candidates: [candidate], updatedEvidence: evidence };
+    }
+
+    return { candidates: [], updatedEvidence: evidence };
   }
 
   const sorted = Array.from(candidateMap.values()).sort((a, b) => {
@@ -360,18 +374,28 @@ export async function runRealInvestigation(
 
   for (const candidate of candidates) {
     const candidateEvidence = allEvidence.filter(e => e.candidateId === candidate.id);
+    const baseFromFields = candidate.matchFields.length * 15;
     if (candidateEvidence.length > 0) {
       const avgReliability = candidateEvidence.reduce((sum, e) => sum + e.reliabilityScore, 0) / candidateEvidence.length;
       const avgRelevance = candidateEvidence.reduce((sum, e) => sum + e.relevanceScore, 0) / candidateEvidence.length;
-      candidate.confidence = clampScore(avgReliability * 0.4 + avgRelevance * 0.4 + Math.min(candidateEvidence.length * 8, 20));
-      candidate.verifiedStatus = candidate.confidence >= 80 ? 'verified' : candidate.confidence >= 50 ? 'possible' : 'unverified';
+      candidate.confidence = clampScore(avgReliability * 0.4 + avgRelevance * 0.4 + Math.min(candidateEvidence.length * 8, 20) + baseFromFields);
+    } else {
+      // Even without linked evidence, boost from match fields
+      candidate.confidence = clampScore(30 + baseFromFields);
     }
+    candidate.verifiedStatus = candidate.confidence >= 80 ? 'verified' : candidate.confidence >= 50 ? 'possible' : 'unverified';
   }
 
   // --- Stage 4: Confidence Calculation ---
   callbacks.onProgress('confidence', 'Calculating confidence scores...', 70);
+  // Include phone_validation evidence in source count
+  const phoneEvCount = allEvidence.filter(e => e.sourceType === 'phone_validation').length;
   const overallConfidence = candidates.length > 0
-    ? clampScore(candidates[0].confidence + (candidates[0].evidence?.length || allEvidence.filter(e => e.candidateId === candidates[0].id).length) * 3)
+    ? clampScore(
+        candidates[0].confidence * 0.7 +
+        Math.min((candidates[0].evidence?.length || 0) * 4, 20) +
+        (phoneEvCount > 0 ? 10 : 0)
+      )
     : 0;
 
   // --- Stage 5: AI Assessment ---

@@ -50,7 +50,7 @@ interface InvestigationStore {
   progress: InvestigationProgress | null;
   isRunning: boolean;
   aiAssessment: AIAssessment | null;
-  startInvestigation: (query: Record<string, string>) => Promise<void>;
+  startInvestigation: (query: Record<string, string>) => Promise<boolean>;
   startBatchInvestigation: (file: File) => Promise<void>;
   selectInvestigation: (id: string) => void;
   deleteInvestigation: (id: string) => void;
@@ -190,7 +190,7 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
   isRunning: false,
   aiAssessment: null,
 
-  startInvestigation: async (query: Record<string, string>) => {
+  startInvestigation: async (query: Record<string, string>): Promise<boolean> => {
     set({ isRunning: true, progress: { stage: 'initializing', progress: 0, message: 'Initializing investigation...', timestamp: new Date().toISOString() } });
     try {
       const { investigation, aiAssessment } = await runRealInvestigation(
@@ -209,9 +209,11 @@ export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
       // Add markers to globe
       useGlobeStore.getState().addInvestigationMarkers(investigation);
       set((state) => ({ investigations: [investigation, ...state.investigations], currentInvestigation: investigation, isRunning: false, progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: new Date().toISOString() }, aiAssessment }));
+      return true;
     } catch (err) {
       console.error('Investigation error:', err);
       set({ isRunning: false, progress: { stage: 'failed', progress: 0, message: 'Investigation failed. Try again.', timestamp: new Date().toISOString() } });
+      return false;
     }
   },
 

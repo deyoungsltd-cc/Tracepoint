@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Monitor, Smartphone, Globe, Shield, Wifi, Cpu, Clock, Fingerprint, Copy, Check } from 'lucide-react';
 
 interface FingerprintData {
@@ -211,10 +211,15 @@ function computeFingerprint(): { data: FingerprintData; hash: string } {
 }
 
 export function DeviceFingerprint() {
-  const initial = useMemo(() => computeFingerprint(), []);
-  const [data, setData] = useState<FingerprintData | null>(initial.data);
-  const [hash] = useState(initial.hash);
+  const [data, setData] = useState<FingerprintData | null>(null);
+  const [hash, setHash] = useState('');
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const { data: fpData, hash: fpHash } = computeFingerprint();
+    setData(fpData);
+    setHash(fpHash);
+  }, []);
 
   useEffect(() => {
     fetch('https://api.ipify.org?format=json')
