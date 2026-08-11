@@ -26,6 +26,9 @@ function supportsWebGL(): boolean {
 class GlobeErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean; error?: string }> {
   state = { hasError: false, error: '' };
   static getDerivedStateFromError(e: any) { return { hasError: true, error: e?.message || 'WebGL not available' }; }
+  componentDidCatch(e: any) {
+    console.warn('[Globe] WebGL failed, falling back to 2D map:', e?.message);
+  }
   render() {
     if (this.state.hasError) return <MapFallback />;
     return this.props.children;
@@ -229,8 +232,8 @@ function DashboardContent() {
       </div>
 
       {/* Center: Map / Globe */}
-      <div className="flex-1 min-h-[300px] lg:min-h-0">
-        <div className="globe-bg w-full h-full rounded-[var(--radius)] border border-border overflow-hidden relative">
+      <div className="flex-1 min-h-[300px] lg:min-h-0 relative">
+        <div className="globe-bg absolute inset-0 rounded-[var(--radius)] border border-border overflow-hidden">
           {viewMode === 'globe' && (
             useFallbackMap ? (
               <MapLibreMap markers={markers} />

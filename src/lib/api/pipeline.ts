@@ -58,9 +58,15 @@ function uuid(): string {
 async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetch(`/api/numverify?phone=${encodeURIComponent(phone)}`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[Pipeline] NumVerify API error: ${res.status}`);
+      return null;
+    }
     return await res.json();
-  } catch { return null; }
+  } catch (err) {
+    console.error('[Pipeline] NumVerify fetch failed:', err);
+    return null;
+  }
 }
 
 async function proxySerperSearch(query: string): Promise<Array<{ title: string; link: string; snippet: string }>> {
@@ -70,14 +76,20 @@ async function proxySerperSearch(query: string): Promise<Array<{ title: string; 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[Pipeline] Serper API error: ${res.status}`);
+      return [];
+    }
     const data = await res.json();
     return (data.organic || []).map((item: Record<string, unknown>) => ({
       title: String(item.title || ''),
       link: String(item.link || ''),
       snippet: String(item.snippet || ''),
     }));
-  } catch { return []; }
+  } catch (err) {
+    console.error('[Pipeline] Serper fetch failed:', err);
+    return [];
+  }
 }
 
 export interface PipelineConfig {
@@ -334,7 +346,7 @@ async function stagePhoneEnrichment(
     timeline.push({
       id: uuid(),
       eventType: 'abstractphone_skipped',
-      description: 'AbstractAPI enrichment skipped — service unavailable or not configured',
+      description: 'AbstractAPI unavailable — check ABSTRACT_API_KEY in server environment',
       metadata: null,
       timestamp: timestampNow(),
     });
@@ -851,6 +863,9 @@ export async function runRealInvestigation(
   allEvidence.push(...phoneResult.evidence);
   allTimeline.push(...phoneResult.timeline);
   if (phoneResult.country) country = phoneResult.country;
+  if (phoneResult.evidence.length === 0 && config.phoneNormalized) {
+    allTimeline.push({ id: uuid(), eventType: 'warning', description: 'Phone validation returned no data — check NumVerify API key', metadata: null, timestamp: timestampNow() });
+  }
 
   // --- Stage 2: Phone Enrichment (cached) ---
   callbacks.onProgress('enrichment', 'Enriching phone data...', 18);
@@ -859,12 +874,18 @@ export async function runRealInvestigation(
   allTimeline.push(...enrichResult.timeline);
   if (enrichResult.country) country = enrichResult.country;
   const callerName = enrichResult.callerName;
+  if (enrichResult.evidence.length === 0 && config.phoneNormalized) {
+    allTimeline.push({ id: uuid(), eventType: 'warning', description: 'Phone enrichment returned no data — check AbstractAPI key', metadata: null, timestamp: timestampNow() });
+  }
 
   // --- Stage 3: Web Search (cached) ---
   callbacks.onProgress('discovery', 'Searching public sources...', 30);
   const searchResult = await stageWebSearch(config, country);
   allEvidence.push(...searchResult.evidence);
   allTimeline.push(...searchResult.timeline);
+  if (searchResult.evidence.length === 0) {
+    allTimeline.push({ id: uuid(), eventType: 'warning', description: 'Web search returned no results — check Serper API key', metadata: null, timestamp: timestampNow() });
+  }
 
   // --- Stage 4: Social Profile Scraper (NEW) ---
   callbacks.onProgress('social_scraping', 'Scanning social profiles...', 45);
@@ -877,6 +898,9 @@ export async function runRealInvestigation(
   const messagingResult = await stageMessagingOSINT(config);
   allEvidence.push(...messagingResult.evidence);
   allTimeline.push(...messagingResult.timeline);
+  if (socialResult.evidence.length === 0 && config.depth !== 'quick') {
+    allTimeline.push({ id: uuid(), eventType: 'info', description: 'No social profiles found in search results', metadata: null, timestamp: timestampNow() });
+  }
 
   // --- Stage 6: Identity Correlation ---
   callbacks.onProgress('correlating', 'Correlating identities...', 62);
@@ -1004,6 +1028,18 @@ export async function runRealInvestigation(
       });
       baseInvestigation.locationStatus = 'last_known';
     }
+  }
+
+  // Final summary
+  const warnings = allTimeline.filter(t => t.eventType === 'warning');
+  if (warnings.length > 0) {
+    allTimeline.push({
+      id: uuid(),
+      eventType: 'completed_with_warnings',
+      description: `Investigation completed with ${warnings.length} warning(s). Some API providers may not be configured. Check your environment variables.`,
+      metadata: { warningCount: warnings.length },
+      timestamp: timestampNow(),
+    });
   }
 
   callbacks.onProgress('completed', 'Investigation complete.', 100);

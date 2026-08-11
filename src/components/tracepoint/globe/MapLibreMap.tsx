@@ -56,6 +56,10 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
       attributionControl: false,
     });
 
+    // Fix mobile resize issue — force map to recalculate size after mount
+    setTimeout(() => map.resize(), 100);
+    window.addEventListener('resize', () => map.resize());
+
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
@@ -150,8 +154,9 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         .maplibregl-ctrl-group { background: #151917 !important; border: 1px solid #232823 !important; border-radius: 3px !important; }
         .maplibregl-ctrl-group button { border-color: #232823 !important; }
         .maplibregl-ctrl-group button span { background: #cdd1c8 !important; }
+        .maplibregl-map { width: 100% !important; height: 100% !important; }
       `}</style>
-      <div ref={mapContainer} className={`w-full h-full ${className}`} />
+      <div ref={mapContainer} className={className || 'w-full h-full'} style={{ minHeight: '280px' }} />
     </>
   );
 }
