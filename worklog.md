@@ -55,3 +55,26 @@ Stage Summary:
 
 **CRITICAL REMINDER**: User MUST set all env vars in Netlify Environment Variables panel
 for the APIs to work in production. The .env.local values only work locally.
+---
+Task ID: 2
+Agent: Main Agent
+Task: Deep audit and fix all 5 production failures - tested APIs locally
+
+Work Log:
+- Recreated .env.local (was deleted between sessions)
+- Started dev server and tested ALL 5 API endpoints with real calls
+- DISCOVERED: AbstractAPI returns nested format {phone_validation: {is_valid}, phone_carrier: {line_type}} but pipeline expected flat format {valid, type, carrier}
+- This meant abstractResult.valid was ALWAYS undefined → entire AbstractAPI stage silently skipped
+- DISCOVERED: OpenAI key returns 403 'Country not supported' from this server region
+- DISCOVERED: Supabase anon key is invalid (401)
+- DISCOVERED: Mobile dashboard used flex-col with 3 panels, left+right panels consumed all vertical space leaving 0px for map
+- Wrote normalizeAbstractResponse() to handle both new nested and legacy flat formats
+- Rewrote Dashboard with separate mobile layout: map fills viewport, panels are bottom sheets
+- Improved /api/setup to distinguish 'tables not found' vs 'invalid key'
+- All APIs tested: NumVerify ✅ (651ms), AbstractAPI ✅ (1203ms), Serper ✅ (1354ms)
+
+Stage Summary:
+- ROOT CAUSE of '6s investigation': AbstractAPI response format mismatch caused entire stage 2 to be skipped silently. Now fixed with normalization.
+- ROOT CAUSE of 'no data on mobile': Flex layout gave map 0 height. Now uses separate mobile layout with bottom sheets.
+- ROOT CAUSE of 'DB needs setup': Supabase anon key is invalid. User must update it.
+- Committed and pushed: b60144f
