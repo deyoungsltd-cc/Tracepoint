@@ -2,21 +2,32 @@
 
 import { useInvestigationStore, useNavStore } from '@/lib/store/app';
 import { Button } from '@/components/ui/button';
-import { FileText, Eye, Download, AlertTriangle, Clock, Printer } from 'lucide-react';
-import { generateInvestigationReport, downloadReport } from '@/lib/generateReport';
+import { FileText, Eye, Download, AlertTriangle, Clock, Printer, FileDown } from 'lucide-react';
+import { downloadPdfReport } from '@/lib/generatePdfReport';
+import { generateInvestigationReport } from '@/lib/generateReport';
 import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter';
+import { useState } from 'react';
 
 export default function ReportsView() {
   const { investigations, aiAssessment, selectInvestigation } = useInvestigationStore();
   const { navigate } = useNavStore();
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   const completed = investigations.filter((i) => i.status === 'completed');
 
-  const handleDownload = (inv: typeof completed[0]) => {
-    // Get the AI assessment for this investigation
-    const isCurrent = useInvestigationStore.getState().currentInvestigation?.id === inv.id;
-    const ai = isCurrent ? aiAssessment : null;
-    downloadReport(inv, ai);
+  const handleDownloadPdf = async (inv: typeof completed[0]) => {
+    setGeneratingPdf(inv.id);
+    try {
+      // Small delay to let UI update
+      await new Promise(r => setTimeout(r, 50));
+      const isCurrent = useInvestigationStore.getState().currentInvestigation?.id === inv.id;
+      const ai = isCurrent ? aiAssessment : null;
+      downloadPdfReport(inv, ai);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+    } finally {
+      setGeneratingPdf(null);
+    }
   };
 
   const handlePrint = (inv: typeof completed[0]) => {
@@ -38,7 +49,7 @@ export default function ReportsView() {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Investigation Reports</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              View, print, or export formal investigation reports
+              View, print, or export formal investigation reports as PDF
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -106,10 +117,15 @@ export default function ReportsView() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDownload(inv)}
+                      onClick={() => handleDownloadPdf(inv)}
+                      disabled={generatingPdf === inv.id}
                       className="border-[#c8a24e]/30 text-[#c8a24e] hover:bg-[#c8a24e]/10 text-xs h-8"
                     >
-                      <Download className="w-3 h-3 mr-1" />
+                      {generatingPdf === inv.id ? (
+                        <span className="animate-spin mr-1">⟳</span>
+                      ) : (
+                        <FileDown className="w-3 h-3 mr-1" />
+                      )}
                       PDF
                     </Button>
                   </div>

@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     const { query } = await request.json();
     if (!query) return NextResponse.json({ error: 'query required' }, { status: 400 });
 
-    const apiKey = process.env.SERPER_API_KEY;
+    const apiKey = process.env.SERPER_API_KEY || process.env.NEXT_PUBLIC_SERPER_API_KEY;
     if (!apiKey) return NextResponse.json({ error: 'Serper API key not configured' }, { status: 500 });
 
     const response = await fetch('https://google.serper.dev/search', {

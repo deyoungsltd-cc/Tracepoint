@@ -32,7 +32,8 @@ export type SourceCategory =
   | 'user_provided'
   | 'device_provider'
   | 'web_search'
-  | 'phone_validation';
+  | 'phone_validation'
+  | 'messaging_osint';
 
 export type UserRole = 'admin' | 'pro' | 'standard';
 

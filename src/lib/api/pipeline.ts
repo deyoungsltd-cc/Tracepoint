@@ -1,13 +1,27 @@
 // ============================================================
-// TRACEPOINT — Real Investigation Pipeline
+// TRACEPOINT — Real Investigation Pipeline (Enhanced)
 // Uses server-side proxy routes for all API calls.
-// API keys never reach the browser.
+// API keys never leave the browser... wait, they never leave the server.
+//
+// Pipeline stages:
+//   1. Phone Validation (NumVerify)
+//   2. Twilio Enrichment
+//   3. Web Search (Serper)
+//   4. Social Profile Scraper (new)
+//   5. Messaging OSINT (WhatsApp/Telegram/Signal) (new)
+//   6. Identity Correlation
+//   7. Confidence Calculation
+//   8. AI Assessment (OpenAI GPT-4o)
+//   9. Finalize & Sanity Cap
 // ============================================================
 
 import type { Investigation, EvidenceItem, IdentityCandidate, TimelineEvent, AIAssessment } from '@/lib/types';
 import { analyzeIdentity } from '@/lib/api/openai';
 import { lookupTwilio } from '@/lib/api/twilio';
 import type { TwilioLookupResult } from '@/lib/api/twilio';
+import { extractSocialUrls, scrapeSocialProfiles, type ScrapedProfile } from '@/lib/api/social-scraper';
+import { checkAllMessagingPlatforms, type MessagingCheckResult } from '@/lib/api/messaging-osint';
+import { withCache, cacheKey, TTL } from '@/lib/api-cache';
 
 // Score helper
 function clampScore(val: number, min = 0, max = 100): number {
@@ -21,10 +35,11 @@ function evidenceReliability(sourceType: string): number {
     business_directory: 80,
     professional_profile: 75,
     news: 85,
-    social_profile: 45,
+    social_profile: 55,
     web_search: 50,
     phone_validation: 95,
     public_record: 88,
+    messaging_osint: 40,
   };
   return map[sourceType] || 50;
 }
@@ -56,7 +71,7 @@ async function proxySerperSearch(query: string): Promise<Array<{ title: string; 
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.organic || []).map((item: Record<string, unknown>, i: number) => ({
+    return (data.organic || []).map((item: Record<string, unknown>) => ({
       title: String(item.title || ''),
       link: String(item.link || ''),
       snippet: String(item.snippet || ''),
@@ -76,7 +91,7 @@ export interface PipelineCallbacks {
   onProgress: (stage: string, message: string, progress: number) => void;
 }
 
-// Stage 1: Validate phone via NumVerify (server proxy)
+// Stage 1: Validate phone via NumVerify (server proxy) — cached
 async function stagePhoneValidation(config: PipelineConfig): Promise<{
   phoneInfo: Record<string, unknown> | null;
   evidence: EvidenceItem[];
@@ -89,7 +104,12 @@ async function stagePhoneValidation(config: PipelineConfig): Promise<{
   let country = config.country || '';
 
   if (config.phoneNormalized) {
-    const result = await proxyNumVerify(config.phoneNormalized);
+    const result = await withCache(
+      cacheKey('numverify', config.phoneNormalized),
+      () => proxyNumVerify(config.phoneNormalized!),
+      TTL.PHONE_VALIDATION
+    );
+
     if (result && result.valid) {
       phoneInfo = result;
       country = String(result.country_code || country);
@@ -118,7 +138,7 @@ async function stagePhoneValidation(config: PipelineConfig): Promise<{
       timeline.push({
         id: uuid(),
         eventType: 'phone_invalid',
-        description: `Phone number could not be validated`,
+        description: 'Phone number could not be validated',
         metadata: { valid: false },
         timestamp: timestampNow(),
       });
@@ -136,7 +156,7 @@ async function stagePhoneValidation(config: PipelineConfig): Promise<{
   return { phoneInfo, evidence, timeline, country };
 }
 
-// Stage 2: Twilio Enrichment (rich phone data via server proxy)
+// Stage 2: Twilio Enrichment (rich phone data via server proxy) — cached
 async function stageTwilioEnrichment(
   config: PipelineConfig,
   currentCountry: string,
@@ -158,7 +178,11 @@ async function stageTwilioEnrichment(
     return { evidence, timeline, country, fallbackCandidateName, callerName };
   }
 
-  const result: TwilioLookupResult | null = await lookupTwilio(config.phoneNormalized);
+  const result: TwilioLookupResult | null = await withCache(
+    cacheKey('twilio', config.phoneNormalized),
+    () => lookupTwilio(config.phoneNormalized!),
+    TTL.TWILIO_LOOKUP
+  );
 
   // Graceful skip — Twilio not configured or request failed
   if (!result) {
@@ -285,9 +309,6 @@ async function stageTwilioEnrichment(
   // --- Update country from Twilio MCC if we don't have one ---
   const mcc = result.carrier?.mobile_country_code || result.line_type_intelligence?.mobile_country_code;
   if (mcc && !country) {
-    // MCC 310–316 = United States, 234–235 = United Kingdom, etc.
-    // We don't have a full MCC table here, but we can at least note it.
-    // The country may have already been set by NumVerify — only use Twilio as fallback.
     const mccCountryMap: Record<string, string> = {
       '310': 'US', '311': 'US', '312': 'US', '313': 'US', '314': 'US', '315': 'US', '316': 'US',
       '234': 'GB', '235': 'GB',
@@ -298,15 +319,13 @@ async function stageTwilioEnrichment(
       '530': 'NZ', '505': 'AU', '302': 'CA',
     };
     const mapped = mccCountryMap[mcc];
-    if (mapped) {
-      country = mapped;
-    }
+    if (mapped) country = mapped;
   }
 
   return { evidence, timeline, country, fallbackCandidateName, callerName };
 }
 
-// Stage 3: Web search via Serper.dev (server proxy)
+// Stage 3: Web search via Serper.dev (server proxy) — cached
 async function stageWebSearch(config: PipelineConfig, country: string): Promise<{
   searchResults: Array<{ title: string; link: string; snippet: string }>;
   evidence: EvidenceItem[];
@@ -322,11 +341,18 @@ async function stageWebSearch(config: PipelineConfig, country: string): Promise<
   if (config.phoneNormalized && country) {
     queries.push(`${config.phoneNormalized.replace(/[^0-9+]/g, '')} site:linkedin.com OR site:facebook.com OR site:twitter.com`);
   }
+  if (config.phoneNormalized) {
+    queries.push(`${config.phoneNormalized.replace(/[^0-9+]/g, '')} site:wa.me OR site:t.me`);
+  }
 
-  const maxQueries = config.depth === 'quick' ? 1 : config.depth === 'standard' ? 2 : queries.length;
+  const maxQueries = config.depth === 'quick' ? 1 : config.depth === 'standard' ? 3 : queries.length;
 
   for (let i = 0; i < Math.min(maxQueries, queries.length); i++) {
-    const results = await proxySerperSearch(queries[i]);
+    const results = await withCache(
+      cacheKey('serper', queries[i]),
+      () => proxySerperSearch(queries[i]),
+      TTL.WEB_SEARCH
+    );
     searchResults.push(...results);
     timeline.push({
       id: uuid(),
@@ -362,7 +388,179 @@ async function stageWebSearch(config: PipelineConfig, country: string): Promise<
   return { searchResults, evidence, timeline };
 }
 
-// Stage 4: Correlate candidates from search results
+// Stage 4 (NEW): Social Profile Scraper
+async function stageSocialScraper(
+  searchResults: Array<{ title: string; link: string; snippet: string }>,
+  config: PipelineConfig,
+): Promise<{ evidence: EvidenceItem[]; timeline: TimelineEvent[]; profiles: ScrapedProfile[] }> {
+  const evidence: EvidenceItem[] = [];
+  const timeline: TimelineEvent[] = [];
+  const profiles: ScrapedProfile[] = [];
+
+  // Only run for 'standard' or 'deep' investigations
+  if (config.depth === 'quick') return { evidence, timeline, profiles };
+
+  const socialUrls = extractSocialUrls(searchResults);
+  if (socialUrls.length === 0) {
+    return { evidence, timeline, profiles };
+  }
+
+  timeline.push({
+    id: uuid(),
+    eventType: 'social_scrape_start',
+    description: `Scraping ${socialUrls.length} social profile(s)...`,
+    metadata: { urls: socialUrls },
+    timestamp: timestampNow(),
+  });
+
+  // Scrape social profiles (limited concurrency)
+  const maxScrape = config.depth === 'deep' ? 5 : 3;
+  const scraped = await scrapeSocialProfiles(socialUrls.slice(0, maxScrape));
+  profiles.push(...scraped);
+
+  for (const profile of scraped) {
+    timeline.push({
+      id: uuid(),
+      eventType: 'social_profile_found',
+      description: `${profile.platform} profile found: ${profile.name || 'Unknown'}`,
+      metadata: { platform: profile.platform, name: profile.name, followers: profile.followers },
+      timestamp: timestampNow(),
+    });
+
+    evidence.push({
+      id: uuid(),
+      claim: `${profile.platform} profile: ${profile.name || 'Unknown'}${profile.location ? ` — ${profile.location}` : ''}`,
+      sourceName: `${profile.platform} Profile`,
+      sourceType: 'social_profile',
+      sourceUrl: profile.url,
+      discoveredAt: timestampNow(),
+      publishedAt: null,
+      excerpt: profile.bio || profile.rawSnippet || 'No bio available',
+      reliabilityScore: evidenceReliability('social_profile'),
+      relevanceScore: profile.name ? 65 : 40,
+      freshnessScore: 70,
+      verificationStatus: 'possible',
+    });
+
+    // Add follower count as supporting evidence
+    if (profile.followers && profile.followers > 0) {
+      evidence.push({
+        id: uuid(),
+        claim: `${profile.platform} account has ${profile.followers.toLocaleString()} followers/subscribers`,
+        sourceName: `${profile.platform} Metrics`,
+        sourceType: 'social_profile',
+        sourceUrl: profile.url,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Followers: ${profile.followers.toLocaleString()}`,
+        reliabilityScore: 50,
+        relevanceScore: 45,
+        freshnessScore: 70,
+        verificationStatus: 'unverified',
+      });
+    }
+
+    // Add username as evidence for Telegram
+    if (profile.platform === 'Telegram' && profile.url) {
+      const usernameMatch = profile.url.match(/t\.me\/([a-zA-Z0-9_]{5,})/);
+      if (usernameMatch && usernameMatch[1] !== 'joinchat') {
+        evidence.push({
+          id: uuid(),
+          claim: `Telegram username: @${usernameMatch[1]}`,
+          sourceName: 'Telegram Username',
+          sourceType: 'social_profile',
+          sourceUrl: profile.url,
+          discoveredAt: timestampNow(),
+          publishedAt: null,
+          excerpt: `Username: @${usernameMatch[1]}`,
+          reliabilityScore: 60,
+          relevanceScore: 55,
+          freshnessScore: 80,
+          verificationStatus: 'possible',
+        });
+      }
+    }
+  }
+
+  return { evidence, timeline, profiles };
+}
+
+// Stage 5 (NEW): Messaging Platform OSINT
+async function stageMessagingOSINT(config: PipelineConfig): Promise<{
+  evidence: EvidenceItem[];
+  timeline: TimelineEvent[];
+  results: MessagingCheckResult[];
+}> {
+  const evidence: EvidenceItem[] = [];
+  const timeline: TimelineEvent[] = [];
+
+  // Only run for 'deep' investigations with a phone number
+  if (config.depth !== 'deep' || !config.phoneNormalized) {
+    return { evidence, timeline, results: [] };
+  }
+
+  timeline.push({
+    id: uuid(),
+    eventType: 'messaging_osint_start',
+    description: 'Checking messaging platform registrations (WhatsApp, Telegram, Signal)...',
+    metadata: null,
+    timestamp: timestampNow(),
+  });
+
+  const results = await checkAllMessagingPlatforms(config.phoneNormalized);
+
+  for (const check of results) {
+    const isRegistered = check.isRegistered === true;
+    const isUnknown = check.isRegistered === 'unknown';
+
+    timeline.push({
+      id: uuid(),
+      eventType: `messaging_${check.platform.toLowerCase()}`,
+      description: `${check.platform}: ${isRegistered ? 'Indicators found' : isUnknown ? 'No public indicators' : 'Not detected'}`,
+      metadata: { platform: check.platform, registered: check.isRegistered, indicator: check.indicator },
+      timestamp: timestampNow(),
+    });
+
+    if (isRegistered && check.evidence) {
+      evidence.push({
+        id: uuid(),
+        claim: `${check.platform}: ${check.indicator}`,
+        sourceName: `${check.platform} OSINT`,
+        sourceType: 'messaging_osint',
+        sourceUrl: null,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: check.evidence.substring(0, 300),
+        reliabilityScore: evidenceReliability('messaging_osint'),
+        relevanceScore: isRegistered ? 60 : 30,
+        freshnessScore: 75,
+        verificationStatus: 'possible',
+      });
+    }
+
+    // Add Telegram username as a high-value finding
+    if (check.platform === 'Telegram' && check.username) {
+      evidence.push({
+        id: uuid(),
+        claim: `Telegram username identified: @${check.username}`,
+        sourceName: 'Telegram OSINT',
+        sourceType: 'social_profile',
+        sourceUrl: `https://t.me/${check.username}`,
+        discoveredAt: timestampNow(),
+        publishedAt: null,
+        excerpt: `Username: @${check.username}`,
+        reliabilityScore: 55,
+        relevanceScore: 65,
+        freshnessScore: 80,
+        verificationStatus: 'possible',
+      });
+    }
+  }
+
+  return { evidence, timeline, results };
+}
+
+// Stage 6: Correlate candidates from search results
 function stageCorrelation(
   evidence: EvidenceItem[],
   phoneInfo: Record<string, unknown> | null,
@@ -378,11 +576,12 @@ function stageCorrelation(
     const title = ev.claim || '';
     const snippet = ev.excerpt || '';
 
+    // Name extraction from different source types
     const nameMatch = title.match(/^([A-Z][a-z]+ [A-Z][a-z]+)/);
     if (nameMatch) {
       name = nameMatch[1];
       identityKey = name.toLowerCase();
-    } else if (ev.sourceName && !['google', 'bing', 'yahoo'].includes(ev.sourceName)) {
+    } else if (ev.sourceName && !['google', 'bing', 'yahoo'].includes(ev.sourceName.toLowerCase())) {
       identityKey = ev.sourceName;
     }
 
@@ -392,6 +591,10 @@ function stageCorrelation(
       const matchFields: string[] = [];
       if (config.phoneNormalized && snippet.includes(config.phoneNormalized.replace(/[^0-9]/g, ''))) matchFields.push('phone');
       if (config.email && snippet.toLowerCase().includes(config.email.toLowerCase())) matchFields.push('email');
+
+      // Check for Telegram username match
+      const telegramMatch = snippet.match(/@([a-zA-Z0-9_]{5,})/);
+      if (telegramMatch) matchFields.push('telegram_username');
 
       candidateMap.set(identityKey, {
         id: uuid(),
@@ -413,6 +616,19 @@ function stageCorrelation(
     const candidate = candidateMap.get(identityKey)!;
     ev.candidateId = candidate.id;
     candidate.evidence.push(ev);
+
+    // Enrich candidate with social platform data
+    if (ev.sourceType === 'social_profile' && ev.sourceName.includes('LinkedIn') && !candidate.business) {
+      // LinkedIn often has company info in bio
+      const bioLines = (ev.excerpt || '').split(/[|·,]/);
+      for (const line of bioLines) {
+        const trimmed = line.trim();
+        if (trimmed.length > 3 && trimmed.length < 50 && !trimmed.includes('@') && !/\d{3}/.test(trimmed)) {
+          candidate.business = trimmed;
+          break;
+        }
+      }
+    }
   }
 
   if (candidateMap.size === 0) {
@@ -436,7 +652,6 @@ function stageCorrelation(
         evidence: [],
       };
 
-      // Link phone validation evidence to this candidate
       for (const ev of phoneEvidence) {
         ev.candidateId = candidate.id;
         candidate.evidence.push(ev);
@@ -458,7 +673,7 @@ function stageCorrelation(
   return { candidates: sorted, updatedEvidence: evidence };
 }
 
-// Stage 5: AI analysis via OpenAI (already proxied)
+// Stage 7: AI analysis via OpenAI (already proxied) — cached
 async function stageAIAnalysis(
   investigation: Investigation,
 ): Promise<{ aiAssessment: AIAssessment | null; timeline: TimelineEvent[] }> {
@@ -473,15 +688,19 @@ async function stageAIAnalysis(
       timestamp: timestampNow(),
     });
 
-    const assessment = await analyzeIdentity(
-      {
-        phone: investigation.inputPhoneNormalized || '',
-        email: investigation.inputEmail || '',
-        candidates: investigation.candidates,
-        evidence: investigation.evidence,
-        country: investigation.inputCountry || '',
-      },
-      { model: 'gpt-4o' }
+    const assessment = await withCache(
+      cacheKey('ai', investigation.id, investigation.evidence.length),
+      () => analyzeIdentity(
+        {
+          phone: investigation.inputPhoneNormalized || '',
+          email: investigation.inputEmail || '',
+          candidates: investigation.candidates,
+          evidence: investigation.evidence,
+          country: investigation.inputCountry || '',
+        },
+        { model: 'gpt-4o' }
+      ),
+      TTL.AI_ANALYSIS
     );
 
     if (assessment) {
@@ -524,40 +743,50 @@ export async function runRealInvestigation(
   const allTimeline: TimelineEvent[] = [];
   let country = config.country || '';
 
-  callbacks.onProgress('initializing', 'Initializing investigation...', 5);
+  callbacks.onProgress('initializing', 'Initializing investigation...', 3);
   allTimeline.push({ id: uuid(), eventType: 'started', description: 'Investigation initiated', metadata: { phone: config.phone, email: config.email, depth: config.depth }, timestamp: now });
 
-  // --- Stage 1: Phone Validation ---
-  callbacks.onProgress('validation', 'Validating phone number...', 10);
+  // --- Stage 1: Phone Validation (cached) ---
+  callbacks.onProgress('validation', 'Validating phone number...', 8);
   const phoneResult = await stagePhoneValidation(config);
   allEvidence.push(...phoneResult.evidence);
   allTimeline.push(...phoneResult.timeline);
   if (phoneResult.country) country = phoneResult.country;
 
-  // --- Stage 2: Twilio Enrichment ---
-  callbacks.onProgress('enrichment', 'Enriching phone data via Twilio...', 22);
+  // --- Stage 2: Twilio Enrichment (cached) ---
+  callbacks.onProgress('enrichment', 'Enriching phone data via Twilio...', 18);
   const twilioResult = await stageTwilioEnrichment(config, country, false, null);
   allEvidence.push(...twilioResult.evidence);
   allTimeline.push(...twilioResult.timeline);
   if (twilioResult.country) country = twilioResult.country;
   const twilioCallerName = twilioResult.callerName;
 
-  // --- Stage 3: Web Search ---
-  callbacks.onProgress('discovery', 'Searching public sources...', 38);
+  // --- Stage 3: Web Search (cached) ---
+  callbacks.onProgress('discovery', 'Searching public sources...', 30);
   const searchResult = await stageWebSearch(config, country);
   allEvidence.push(...searchResult.evidence);
   allTimeline.push(...searchResult.timeline);
 
-  // --- Stage 4: Identity Correlation ---
-  callbacks.onProgress('correlating', 'Correlating identities...', 58);
+  // --- Stage 4: Social Profile Scraper (NEW) ---
+  callbacks.onProgress('social_scraping', 'Scanning social profiles...', 45);
+  const socialResult = await stageSocialScraper(searchResult.searchResults, config);
+  allEvidence.push(...socialResult.evidence);
+  allTimeline.push(...socialResult.timeline);
+
+  // --- Stage 5: Messaging OSINT (NEW, deep only) ---
+  callbacks.onProgress('messaging_check', 'Checking messaging platforms...', 52);
+  const messagingResult = await stageMessagingOSINT(config);
+  allEvidence.push(...messagingResult.evidence);
+  allTimeline.push(...messagingResult.timeline);
+
+  // --- Stage 6: Identity Correlation ---
+  callbacks.onProgress('correlating', 'Correlating identities...', 62);
   const { candidates, updatedEvidence } = stageCorrelation(allEvidence, phoneResult.phoneInfo, config);
 
   // Apply Twilio caller name to candidates that have no name yet
   if (twilioCallerName) {
     for (const c of candidates) {
-      if (!c.name) {
-        c.name = twilioCallerName;
-      }
+      if (!c.name) c.name = twilioCallerName;
     }
   }
 
@@ -569,25 +798,27 @@ export async function runRealInvestigation(
       const avgRelevance = candidateEvidence.reduce((sum, e) => sum + e.relevanceScore, 0) / candidateEvidence.length;
       candidate.confidence = clampScore(avgReliability * 0.4 + avgRelevance * 0.4 + Math.min(candidateEvidence.length * 8, 20) + baseFromFields);
     } else {
-      // Even without linked evidence, boost from match fields
       candidate.confidence = clampScore(30 + baseFromFields);
     }
     candidate.verifiedStatus = candidate.confidence >= 80 ? 'verified' : candidate.confidence >= 50 ? 'possible' : 'unverified';
   }
 
-  // --- Stage 5: Confidence Calculation ---
+  // --- Stage 7: Confidence Calculation ---
   callbacks.onProgress('confidence', 'Calculating confidence scores...', 72);
-  // Include phone_validation evidence in source count
   const phoneEvCount = allEvidence.filter(e => e.sourceType === 'phone_validation').length;
+  const socialEvCount = allEvidence.filter(e => e.sourceType === 'social_profile').length;
+  const messagingEvCount = allEvidence.filter(e => e.sourceType === 'messaging_osint').length;
   const overallConfidence = candidates.length > 0
     ? clampScore(
         candidates[0].confidence * 0.7 +
         Math.min((candidates[0].evidence?.length || 0) * 4, 20) +
-        (phoneEvCount > 0 ? 10 : 0)
+        (phoneEvCount > 0 ? 8 : 0) +
+        (socialEvCount > 0 ? 5 : 0) +
+        (messagingEvCount > 0 ? 3 : 0)
       )
     : 0;
 
-  // --- Stage 6: AI Assessment ---
+  // --- Stage 8: AI Assessment (cached) ---
   callbacks.onProgress('ai_analysis', 'Running AI analysis...', 85);
   const baseInvestigation: Investigation = {
     id,
@@ -604,7 +835,7 @@ export async function runRealInvestigation(
     inputCountry: country || null,
     inputState: null,
     inputCity: phoneResult.phoneInfo?.location ? String(phoneResult.phoneInfo.location) : null,
-    summary: `Investigation completed for ${config.phone || config.email || 'unknown identifier'}. ${candidates.length} identity candidate${candidates.length !== 1 ? 's' : ''} found.`,
+    summary: `Investigation completed for ${config.phone || config.email || 'unknown identifier'}. ${candidates.length} identity candidate${candidates.length !== 1 ? 's' : ''} found. ${socialResult.profiles.length} social profile${socialResult.profiles.length !== 1 ? 's' : ''} scanned. ${messagingResult.results.length} messaging platform${messagingResult.results.length !== 1 ? 's' : ''} checked.`,
     identityCount: candidates.length,
     evidenceCount: allEvidence.length,
     sourceCount: new Set(allEvidence.map(e => e.sourceName)).size,
@@ -626,33 +857,33 @@ export async function runRealInvestigation(
   allTimeline.push(...aiTimeline);
   baseInvestigation.timeline = allTimeline;
 
-  // --- Stage 7: Finalize ---
+  // --- Stage 9: Finalize ---
   callbacks.onProgress('completing', 'Generating report...', 93);
 
   if (aiAssessment) {
     // Sanity cap: AI sometimes over-estimates confidence with minimal evidence.
-    // If the only evidence source is phone_validation, cap confidence at 45.
     const nonPhoneEvidence = allEvidence.filter(e => e.sourceType !== 'phone_validation');
     const webEvidence = nonPhoneEvidence.filter(e => e.sourceType === 'web_search' && e.relevanceScore >= 60);
     let aiScore = aiAssessment.confidence.score;
     if (nonPhoneEvidence.length === 0 && webEvidence.length === 0) {
-      // Only phone validation — cap at LOW range
       aiScore = Math.min(aiScore, 45);
       aiAssessment.confidence.level = 'LOW';
       aiAssessment.confidence.explanation = 'Only phone number validation was available. No web sources or public records linked a specific identity to this number. ' + (aiAssessment.confidence.explanation || '');
     } else if (webEvidence.length < 2) {
-      // 0-1 relevant web results — cap at MODERATE
       aiScore = Math.min(aiScore, 65);
       if (aiAssessment.confidence.level === 'HIGH') {
         aiAssessment.confidence.level = 'MODERATE';
       }
     }
+    // Bonus: If social profiles found, allow slightly higher confidence
+    if (socialEvCount >= 2 && aiScore >= 50) {
+      aiScore = Math.min(aiScore + 5, 95);
+    }
     baseInvestigation.confidence = aiScore;
     baseInvestigation.summary = aiAssessment.conclusion;
   }
 
-  // --- Stage 8: Extract geolocation from NumVerify for globe pins ---
-  // NumVerify returns latitude/longitude for validated numbers
+  // --- Extract geolocation from NumVerify for globe pins ---
   if (phoneResult.phoneInfo && phoneResult.phoneInfo.valid) {
     const lat = parseFloat(phoneResult.phoneInfo.latitude as string);
     const lng = parseFloat(phoneResult.phoneInfo.longitude as string);

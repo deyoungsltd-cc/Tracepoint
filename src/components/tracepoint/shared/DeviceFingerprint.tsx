@@ -271,14 +271,21 @@ export function DeviceFingerprint() {
     try {
       const result = computeFingerprint();
       if (!result.data) {
-        setError('Fingerprint computation not available in this environment');
+        // Use requestAnimationFrame to avoid synchronous setState in effect
+        requestAnimationFrame(() => {
+          setError('Fingerprint computation not available in this environment');
+        });
         return;
       }
-      setData(result.data);
-      setHash(result.hash);
+      requestAnimationFrame(() => {
+        setData(result.data);
+        setHash(result.hash);
+      });
     } catch (err) {
       console.error('[DeviceFingerprint] init error:', err);
-      setError('Failed to compute device fingerprint');
+      requestAnimationFrame(() => {
+        setError('Failed to compute device fingerprint');
+      });
     }
   }, []);
 

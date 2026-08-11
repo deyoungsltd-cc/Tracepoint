@@ -1,0 +1,683 @@
+     1→// ============================================================
+     2→// TRACEPOINT — Real Investigation Pipeline
+     3→// Uses server-side proxy routes for all API calls.
+     4→// API keys never reach the browser.
+     5→// ============================================================
+     6→
+     7→import type { Investigation, EvidenceItem, IdentityCandidate, TimelineEvent, AIAssessment } from '@/lib/types';
+     8→import { analyzeIdentity } from '@/lib/api/openai';
+     9→import { lookupTwilio } from '@/lib/api/twilio';
+    10→import type { TwilioLookupResult } from '@/lib/api/twilio';
+    11→
+    12→// Score helper
+    13→function clampScore(val: number, min = 0, max = 100): number {
+    14→  return Math.max(min, Math.min(max, Math.round(val)));
+    15→}
+    16→
+    17→function evidenceReliability(sourceType: string): number {
+    18→  const map: Record<string, number> = {
+    19→    government_record: 97,
+    20→    official_website: 93,
+    21→    business_directory: 80,
+    22→    professional_profile: 75,
+    23→    news: 85,
+    24→    social_profile: 45,
+    25→    web_search: 50,
+    26→    phone_validation: 95,
+    27→    public_record: 88,
+    28→  };
+    29→  return map[sourceType] || 50;
+    30→}
+    31→
+    32→function timestampNow(): string {
+    33→  return new Date().toISOString();
+    34→}
+    35→
+    36→function uuid(): string {
+    37→  return crypto.randomUUID();
+    38→}
+    39→
+    40→// --- Server-side API proxies (keys never leave the server) ---
+    41→
+    42→async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | null> {
+    43→  try {
+    44→    const res = await fetch(`/api/numverify?phone=${encodeURIComponent(phone)}`);
+    45→    if (!res.ok) return null;
+    46→    return await res.json();
+    47→  } catch { return null; }
+    48→}
+    49→
+    50→async function proxySerperSearch(query: string): Promise<Array<{ title: string; link: string; snippet: string }>> {
+    51→  try {
+    52→    const res = await fetch('/api/serper', {
+    53→      method: 'POST',
+    54→      headers: { 'Content-Type': 'application/json' },
+    55→      body: JSON.stringify({ query }),
+    56→    });
+    57→    if (!res.ok) return [];
+    58→    const data = await res.json();
+    59→    return (data.organic || []).map((item: Record<string, unknown>, i: number) => ({
+    60→      title: String(item.title || ''),
+    61→      link: String(item.link || ''),
+    62→      snippet: String(item.snippet || ''),
+    63→    }));
+    64→  } catch { return []; }
+    65→}
+    66→
+    67→export interface PipelineConfig {
+    68→  phone?: string;
+    69→  phoneNormalized?: string;
+    70→  email?: string;
+    71→  country?: string;
+    72→  depth: 'quick' | 'standard' | 'deep';
+    73→}
+    74→
+    75→export interface PipelineCallbacks {
+    76→  onProgress: (stage: string, message: string, progress: number) => void;
+    77→}
+    78→
+    79→// Stage 1: Validate phone via NumVerify (server proxy)
+    80→async function stagePhoneValidation(config: PipelineConfig): Promise<{
+    81→  phoneInfo: Record<string, unknown> | null;
+    82→  evidence: EvidenceItem[];
+    83→  timeline: TimelineEvent[];
+    84→  country: string;
+    85→}> {
+    86→  const evidence: EvidenceItem[] = [];
+    87→  const timeline: TimelineEvent[] = [];
+    88→  let phoneInfo: Record<string, unknown> | null = null;
+    89→  let country = config.country || '';
+    90→
+    91→  if (config.phoneNormalized) {
+    92→    const result = await proxyNumVerify(config.phoneNormalized);
+    93→    if (result && result.valid) {
+    94→      phoneInfo = result;
+    95→      country = String(result.country_code || country);
+    96→      timeline.push({
+    97→        id: uuid(),
+    98→        eventType: 'phone_validated',
+    99→        description: `Phone validated: ${result.line_type || 'Unknown type'}, ${result.carrier || 'Unknown carrier'}, ${result.country_name || ''}`,
+   100→        metadata: { valid: true, country: result.country_code, carrier: result.carrier, lineType: result.line_type },
+   101→        timestamp: timestampNow(),
+   102→      });
+   103→      evidence.push({
+   104→        id: uuid(),
+   105→        claim: `Phone number ${result.international_format} is a valid ${result.line_type || 'phone'} number registered in ${result.country_name || 'unknown'}${result.carrier ? ` via ${result.carrier}` : ''}`,
+   106→        sourceName: 'NumVerify Phone Validation',
+   107→        sourceType: 'phone_validation',
+   108→        sourceUrl: null,
+   109→        discoveredAt: timestampNow(),
+   110→        publishedAt: null,
+   111→        excerpt: `Country: ${result.country_name}, Location: ${result.location || 'N/A'}, Carrier: ${result.carrier || 'N/A'}, Line: ${result.line_type || 'N/A'}`,
+   112→        reliabilityScore: 95,
+   113→        relevanceScore: 90,
+   114→        freshnessScore: 99,
+   115→        verificationStatus: 'verified',
+   116→      });
+   117→    } else if (result) {
+   118→      timeline.push({
+   119→        id: uuid(),
+   120→        eventType: 'phone_invalid',
+   121→        description: `Phone number could not be validated`,
+   122→        metadata: { valid: false },
+   123→        timestamp: timestampNow(),
+   124→      });
+   125→    } else {
+   126→      timeline.push({
+   127→        id: uuid(),
+   128→        eventType: 'phone_validation_failed',
+   129→        description: 'Phone validation service unavailable',
+   130→        metadata: null,
+   131→        timestamp: timestampNow(),
+   132→      });
+   133→    }
+   134→  }
+   135→
+   136→  return { phoneInfo, evidence, timeline, country };
+   137→}
+   138→
+   139→// Stage 2: Twilio Enrichment (rich phone data via server proxy)
+   140→async function stageTwilioEnrichment(
+   141→  config: PipelineConfig,
+   142→  currentCountry: string,
+   143→  hasWebCandidates: boolean,
+   144→  fallbackCandidateName: string | null,
+   145→): Promise<{
+   146→  evidence: EvidenceItem[];
+   147→  timeline: TimelineEvent[];
+   148→  country: string;
+   149→  fallbackCandidateName: string | null;
+   150→  callerName: string | null;
+   151→}> {
+   152→  const evidence: EvidenceItem[] = [];
+   153→  const timeline: TimelineEvent[] = [];
+   154→  let country = currentCountry;
+   155→  let callerName: string | null = null;
+   156→
+   157→  if (!config.phoneNormalized) {
+   158→    return { evidence, timeline, country, fallbackCandidateName, callerName };
+   159→  }
+   160→
+   161→  const result: TwilioLookupResult | null = await lookupTwilio(config.phoneNormalized);
+   162→
+   163→  // Graceful skip — Twilio not configured or request failed
+   164→  if (!result) {
+   165→    timeline.push({
+   166→      id: uuid(),
+   167→      eventType: 'twilio_skipped',
+   168→      description: 'Twilio enrichment skipped — service unavailable or not configured',
+   169→      metadata: null,
+   170→      timestamp: timestampNow(),
+   171→    });
+   172→    return { evidence, timeline, country, fallbackCandidateName, callerName };
+   173→  }
+   174→
+   175→  // --- Caller Name ---
+   176→  if (result.caller_name?.caller_name) {
+   177→    const name = result.caller_name.caller_name;
+   178→    callerName = name;
+   179→    timeline.push({
+   180→      id: uuid(),
+   181→      eventType: 'twilio_caller_name',
+   182→      description: `Caller name retrieved: ${name}`,
+   183→      metadata: { firstName: result.caller_name.first_name, lastName: result.caller_name.last_name },
+   184→      timestamp: timestampNow(),
+   185→    });
+   186→    evidence.push({
+   187→      id: uuid(),
+   188→      claim: `Registered caller name for ${config.phoneNormalized} is "${name}"`,
+   189→      sourceName: 'Twilio Caller Name',
+   190→      sourceType: 'phone_validation',
+   191→      sourceUrl: null,
+   192→      discoveredAt: timestampNow(),
+   193→      publishedAt: null,
+   194→      excerpt: `Caller Name: ${name}${result.caller_name.first_name ? ` (First: ${result.caller_name.first_name}, Last: ${result.caller_name.last_name})` : ''}`,
+   195→      reliabilityScore: 85,
+   196→      relevanceScore: 80,
+   197→      freshnessScore: 99,
+   198→      verificationStatus: 'possible',
+   199→    });
+   200→
+   201→    // If no web candidates were found, use the caller name for the fallback candidate
+   202→    if (!hasWebCandidates && !fallbackCandidateName) {
+   203→      fallbackCandidateName = name;
+   204→    }
+   205→  }
+   206→
+   207→  // --- Carrier Info ---
+   208→  if (result.carrier) {
+   209→    const { name, type, mobile_country_code, mobile_network_code } = result.carrier;
+   210→    timeline.push({
+   211→      id: uuid(),
+   212→      eventType: 'twilio_carrier',
+   213→      description: `Carrier identified: ${name || 'Unknown'} (${type || 'Unknown type'})`,
+   214→      metadata: { name, type, mcc: mobile_country_code, mnc: mobile_network_code },
+   215→      timestamp: timestampNow(),
+   216→    });
+   217→    evidence.push({
+   218→      id: uuid(),
+   219→      claim: `Phone ${config.phoneNormalized} is carried by ${name || 'an unknown provider'} (${type || 'unknown type'}, MCC: ${mobile_country_code || 'N/A'}, MNC: ${mobile_network_code || 'N/A'})`,
+   220→      sourceName: 'Twilio Carrier Lookup',
+   221→      sourceType: 'phone_validation',
+   222→      sourceUrl: null,
+   223→      discoveredAt: timestampNow(),
+   224→      publishedAt: null,
+   225→      excerpt: `Carrier: ${name || 'N/A'}, Type: ${type || 'N/A'}, MCC: ${mobile_country_code || 'N/A'}, MNC: ${mobile_network_code || 'N/A'}`,
+   226→      reliabilityScore: 90,
+   227→      relevanceScore: 70,
+   228→      freshnessScore: 99,
+   229→      verificationStatus: 'verified',
+   230→    });
+   231→  }
+   232→
+   233→  // --- Line Type Intelligence ---
+   234→  if (result.line_type_intelligence) {
+   235→    const { type, mobile_country_code, mobile_network_code, carrier_name } = result.line_type_intelligence;
+   236→    timeline.push({
+   237→      id: uuid(),
+   238→      eventType: 'twilio_line_type',
+   239→      description: `Line type: ${type || 'Unknown'}`,
+   240→      metadata: { type, mcc: mobile_country_code, mnc: mobile_network_code, carrierName: carrier_name },
+   241→      timestamp: timestampNow(),
+   242→    });
+   243→    evidence.push({
+   244→      id: uuid(),
+   245→      claim: `Line type intelligence for ${config.phoneNormalized}: ${type || 'unknown'}${carrier_name ? ` via ${carrier_name}` : ''}`,
+   246→      sourceName: 'Twilio Line Type Intelligence',
+   247→      sourceType: 'phone_validation',
+   248→      sourceUrl: null,
+   249→      discoveredAt: timestampNow(),
+   250→      publishedAt: null,
+   251→      excerpt: `Line Type: ${type || 'N/A'}, Carrier: ${carrier_name || 'N/A'}, MCC: ${mobile_country_code || 'N/A'}, MNC: ${mobile_network_code || 'N/A'}`,
+   252→      reliabilityScore: 90,
+   253→      relevanceScore: 75,
+   254→      freshnessScore: 99,
+   255→      verificationStatus: 'verified',
+   256→    });
+   257→  }
+   258→
+   259→  // --- Call Forwarding Status ---
+   260→  if (result.call_forwarding) {
+   261→    const enabled = result.call_forwarding.enabled;
+   262→    timeline.push({
+   263→      id: uuid(),
+   264→      eventType: 'twilio_call_forwarding',
+   265→      description: `Call forwarding: ${enabled ? 'ENABLED' : 'disabled'}`,
+   266→      metadata: { enabled },
+   267→      timestamp: timestampNow(),
+   268→    });
+   269→    evidence.push({
+   270→      id: uuid(),
+   271→      claim: `Call forwarding for ${config.phoneNormalized} is ${enabled ? 'enabled — number may be redirected to another device' : 'disabled'}`,
+   272→      sourceName: 'Twilio Call Forwarding Check',
+   273→      sourceType: 'phone_validation',
+   274→      sourceUrl: null,
+   275→      discoveredAt: timestampNow(),
+   276→      publishedAt: null,
+   277→      excerpt: `Call Forwarding: ${enabled ? 'Enabled' : 'Disabled'}`,
+   278→      reliabilityScore: 95,
+   279→      relevanceScore: 65,
+   280→      freshnessScore: 99,
+   281→      verificationStatus: 'verified',
+   282→    });
+   283→  }
+   284→
+   285→  // --- Update country from Twilio MCC if we don't have one ---
+   286→  const mcc = result.carrier?.mobile_country_code || result.line_type_intelligence?.mobile_country_code;
+   287→  if (mcc && !country) {
+   288→    // MCC 310–316 = United States, 234–235 = United Kingdom, etc.
+   289→    // We don't have a full MCC table here, but we can at least note it.
+   290→    // The country may have already been set by NumVerify — only use Twilio as fallback.
+   291→    const mccCountryMap: Record<string, string> = {
+   292→      '310': 'US', '311': 'US', '312': 'US', '313': 'US', '314': 'US', '315': 'US', '316': 'US',
+   293→      '234': 'GB', '235': 'GB',
+   294→      '208': 'FR', '222': 'IT', '262': 'DE', '214': 'ES',
+   295→      '404': 'IN', '405': 'IN', '406': 'IN', '407': 'IN', '408': 'IN', '409': 'IN', '410': 'IN', '411': 'IN', '412': 'IN', '413': 'IN', '414': 'IN', '415': 'IN',
+   296→      '730': 'CL', '724': 'BR', '334': 'MX', '732': 'CO',
+   297→      '440': 'JP', '450': 'KR', '460': 'CN', '454': 'HK', '525': 'SG',
+   298→      '530': 'NZ', '505': 'AU', '302': 'CA',
+   299→    };
+   300→    const mapped = mccCountryMap[mcc];
+   301→    if (mapped) {
+   302→      country = mapped;
+   303→    }
+   304→  }
+   305→
+   306→  return { evidence, timeline, country, fallbackCandidateName, callerName };
+   307→}
+   308→
+   309→// Stage 3: Web search via Serper.dev (server proxy)
+   310→async function stageWebSearch(config: PipelineConfig, country: string): Promise<{
+   311→  searchResults: Array<{ title: string; link: string; snippet: string }>;
+   312→  evidence: EvidenceItem[];
+   313→  timeline: TimelineEvent[];
+   314→}> {
+   315→  const evidence: EvidenceItem[] = [];
+   316→  const timeline: TimelineEvent[] = [];
+   317→  let searchResults: Array<{ title: string; link: string; snippet: string }> = [];
+   318→
+   319→  const queries: string[] = [];
+   320→  if (config.phoneNormalized) queries.push(`"${config.phoneNormalized}"`);
+   321→  if (config.email) queries.push(`"${config.email}"`);
+   322→  if (config.phoneNormalized && country) {
+   323→    queries.push(`${config.phoneNormalized.replace(/[^0-9+]/g, '')} site:linkedin.com OR site:facebook.com OR site:twitter.com`);
+   324→  }
+   325→
+   326→  const maxQueries = config.depth === 'quick' ? 1 : config.depth === 'standard' ? 2 : queries.length;
+   327→
+   328→  for (let i = 0; i < Math.min(maxQueries, queries.length); i++) {
+   329→    const results = await proxySerperSearch(queries[i]);
+   330→    searchResults.push(...results);
+   331→    timeline.push({
+   332→      id: uuid(),
+   333→      eventType: 'web_search',
+   334→      description: `Search "${queries[i].substring(0, 60)}..." returned ${results.length} results`,
+   335→      metadata: { query: queries[i], count: results.length },
+   336→      timestamp: timestampNow(),
+   337→    });
+   338→  }
+   339→
+   340→  for (const result of searchResults) {
+   341→    const relScore = clampScore(
+   342→      50 + (config.email && result.snippet.toLowerCase().includes(config.email.toLowerCase()) ? 30 : 0) +
+   343→      (config.phoneNormalized && result.snippet.toLowerCase().includes(config.phoneNormalized.replace(/[^0-9]/g, '')) ? 25 : 0)
+   344→    );
+   345→
+   346→    evidence.push({
+   347→      id: uuid(),
+   348→      claim: result.title,
+   349→      sourceName: (() => { try { return new URL(result.link).hostname.replace('www.', ''); } catch { return 'unknown'; } })(),
+   350→      sourceType: 'web_search',
+   351→      sourceUrl: result.link,
+   352→      discoveredAt: timestampNow(),
+   353→      publishedAt: null,
+   354→      excerpt: result.snippet,
+   355→      reliabilityScore: evidenceReliability('web_search'),
+   356→      relevanceScore: relScore,
+   357→      freshnessScore: 50,
+   358→      verificationStatus: relScore >= 70 ? 'possible' : 'unverified',
+   359→    });
+   360→  }
+   361→
+   362→  return { searchResults, evidence, timeline };
+   363→}
+   364→
+   365→// Stage 4: Correlate candidates from search results
+   366→function stageCorrelation(
+   367→  evidence: EvidenceItem[],
+   368→  phoneInfo: Record<string, unknown> | null,
+   369→  config: PipelineConfig
+   370→): { candidates: IdentityCandidate[]; updatedEvidence: EvidenceItem[] } {
+   371→  const candidateMap = new Map<string, IdentityCandidate>();
+   372→
+   373→  for (const ev of evidence) {
+   374→    if (ev.sourceType === 'phone_validation') continue;
+   375→
+   376→    let identityKey = '';
+   377→    let name: string | null = null;
+   378→    const title = ev.claim || '';
+   379→    const snippet = ev.excerpt || '';
+   380→
+   381→    const nameMatch = title.match(/^([A-Z][a-z]+ [A-Z][a-z]+)/);
+   382→    if (nameMatch) {
+   383→      name = nameMatch[1];
+   384→      identityKey = name.toLowerCase();
+   385→    } else if (ev.sourceName && !['google', 'bing', 'yahoo'].includes(ev.sourceName)) {
+   386→      identityKey = ev.sourceName;
+   387→    }
+   388→
+   389→    if (!identityKey) continue;
+   390→
+   391→    if (!candidateMap.has(identityKey)) {
+   392→      const matchFields: string[] = [];
+   393→      if (config.phoneNormalized && snippet.includes(config.phoneNormalized.replace(/[^0-9]/g, ''))) matchFields.push('phone');
+   394→      if (config.email && snippet.toLowerCase().includes(config.email.toLowerCase())) matchFields.push('email');
+   395→
+   396→      candidateMap.set(identityKey, {
+   397→        id: uuid(),
+   398→        rank: candidateMap.size + 1,
+   399→        name,
+   400→        phone: config.phoneNormalized || null,
+   401→        email: config.email || null,
+   402→        business: null,
+   403→        website: ev.sourceUrl && ev.sourceUrl.startsWith('http') ? ev.sourceUrl : null,
+   404→        location: phoneInfo && phoneInfo.location ? String(phoneInfo.location) : null,
+   405→        photoUrl: null,
+   406→        confidence: matchFields.length > 0 ? 60 : 30,
+   407→        verifiedStatus: matchFields.length >= 2 ? 'possible' : 'unverified',
+   408→        matchFields,
+   409→        evidence: [],
+   410→      });
+   411→    }
+   412→
+   413→    const candidate = candidateMap.get(identityKey)!;
+   414→    ev.candidateId = candidate.id;
+   415→    candidate.evidence.push(ev);
+   416→  }
+   417→
+   418→  if (candidateMap.size === 0) {
+   419→    const phoneEvidence = evidence.filter(e => e.sourceType === 'phone_validation');
+   420→    const phoneValid = phoneInfo && phoneInfo.valid;
+   421→
+   422→    if (phoneValid || config.email) {
+   423→      const candidate: IdentityCandidate = {
+   424→        id: uuid(),
+   425→        rank: 1,
+   426→        name: config.email ? config.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null,
+   427→        phone: phoneValid ? String(phoneInfo.international_format || '') : (config.phoneNormalized || null),
+   428→        email: config.email || null,
+   429→        business: null,
+   430→        website: null,
+   431→        location: phoneValid ? String(phoneInfo.location || phoneInfo.country_name || '') : null,
+   432→        photoUrl: null,
+   433→        confidence: phoneValid ? 55 : 35,
+   434→        verifiedStatus: phoneValid ? 'possible' : 'unverified',
+   435→        matchFields: [...(phoneValid ? ['phone'] : []), ...(config.email ? ['email'] : [])],
+   436→        evidence: [],
+   437→      };
+   438→
+   439→      // Link phone validation evidence to this candidate
+   440→      for (const ev of phoneEvidence) {
+   441→        ev.candidateId = candidate.id;
+   442→        candidate.evidence.push(ev);
+   443→      }
+   444→
+   445→      return { candidates: [candidate], updatedEvidence: evidence };
+   446→    }
+   447→
+   448→    return { candidates: [], updatedEvidence: evidence };
+   449→  }
+   450→
+   451→  const sorted = Array.from(candidateMap.values()).sort((a, b) => {
+   452→    const aScore = a.confidence * 0.4 + a.evidence.length * 15;
+   453→    const bScore = b.confidence * 0.4 + b.evidence.length * 15;
+   454→    return bScore - aScore;
+   455→  });
+   456→  sorted.forEach((c, i) => { c.rank = i + 1; });
+   457→
+   458→  return { candidates: sorted, updatedEvidence: evidence };
+   459→}
+   460→
+   461→// Stage 5: AI analysis via OpenAI (already proxied)
+   462→async function stageAIAnalysis(
+   463→  investigation: Investigation,
+   464→): Promise<{ aiAssessment: AIAssessment | null; timeline: TimelineEvent[] }> {
+   465→  const timeline: TimelineEvent[] = [];
+   466→
+   467→  try {
+   468→    timeline.push({
+   469→      id: uuid(),
+   470→      eventType: 'ai_analyzing',
+   471→      description: 'AI analyst processing evidence and candidates...',
+   472→      metadata: null,
+   473→      timestamp: timestampNow(),
+   474→    });
+   475→
+   476→    const assessment = await analyzeIdentity(
+   477→      {
+   478→        phone: investigation.inputPhoneNormalized || '',
+   479→        email: investigation.inputEmail || '',
+   480→        candidates: investigation.candidates,
+   481→        evidence: investigation.evidence,
+   482→        country: investigation.inputCountry || '',
+   483→      },
+   484→      { model: 'gpt-4o' }
+   485→    );
+   486→
+   487→    if (assessment) {
+   488→      timeline.push({
+   489→        id: uuid(),
+   490→        eventType: 'ai_completed',
+   491→        description: `AI assessment complete — ${assessment.confidence.level} confidence (${assessment.confidence.score}%)`,
+   492→        metadata: { level: assessment.confidence.level, score: assessment.confidence.score },
+   493→        timestamp: timestampNow(),
+   494→      });
+   495→    }
+   496→
+   497→    return { aiAssessment: assessment, timeline };
+   498→  } catch {
+   499→    timeline.push({
+   500→      id: uuid(),
+   501→      eventType: 'ai_failed',
+   502→      description: 'AI analysis failed — continuing without AI assessment',
+   503→      metadata: null,
+   504→      timestamp: timestampNow(),
+   505→    });
+   506→    return { aiAssessment: null, timeline };
+   507→  }
+   508→}
+   509→
+   510→// ============================================================
+   511→// MAIN PIPELINE
+   512→// ============================================================
+   513→
+   514→export async function runRealInvestigation(
+   515→  config: PipelineConfig,
+   516→  callbacks: PipelineCallbacks
+   517→): Promise<{
+   518→  investigation: Investigation;
+   519→  aiAssessment: AIAssessment | null;
+   520→}> {
+   521→  const id = uuid();
+   522→  const now = timestampNow();
+   523→  const allEvidence: EvidenceItem[] = [];
+   524→  const allTimeline: TimelineEvent[] = [];
+   525→  let country = config.country || '';
+   526→
+   527→  callbacks.onProgress('initializing', 'Initializing investigation...', 5);
+   528→  allTimeline.push({ id: uuid(), eventType: 'started', description: 'Investigation initiated', metadata: { phone: config.phone, email: config.email, depth: config.depth }, timestamp: now });
+   529→
+   530→  // --- Stage 1: Phone Validation ---
+   531→  callbacks.onProgress('validation', 'Validating phone number...', 10);
+   532→  const phoneResult = await stagePhoneValidation(config);
+   533→  allEvidence.push(...phoneResult.evidence);
+   534→  allTimeline.push(...phoneResult.timeline);
+   535→  if (phoneResult.country) country = phoneResult.country;
+   536→
+   537→  // --- Stage 2: Twilio Enrichment ---
+   538→  callbacks.onProgress('enrichment', 'Enriching phone data via Twilio...', 22);
+   539→  const twilioResult = await stageTwilioEnrichment(config, country, false, null);
+   540→  allEvidence.push(...twilioResult.evidence);
+   541→  allTimeline.push(...twilioResult.timeline);
+   542→  if (twilioResult.country) country = twilioResult.country;
+   543→  const twilioCallerName = twilioResult.callerName;
+   544→
+   545→  // --- Stage 3: Web Search ---
+   546→  callbacks.onProgress('discovery', 'Searching public sources...', 38);
+   547→  const searchResult = await stageWebSearch(config, country);
+   548→  allEvidence.push(...searchResult.evidence);
+   549→  allTimeline.push(...searchResult.timeline);
+   550→
+   551→  // --- Stage 4: Identity Correlation ---
+   552→  callbacks.onProgress('correlating', 'Correlating identities...', 58);
+   553→  const { candidates, updatedEvidence } = stageCorrelation(allEvidence, phoneResult.phoneInfo, config);
+   554→
+   555→  // Apply Twilio caller name to candidates that have no name yet
+   556→  if (twilioCallerName) {
+   557→    for (const c of candidates) {
+   558→      if (!c.name) {
+   559→        c.name = twilioCallerName;
+   560→      }
+   561→    }
+   562→  }
+   563→
+   564→  for (const candidate of candidates) {
+   565→    const candidateEvidence = allEvidence.filter(e => e.candidateId === candidate.id);
+   566→    const baseFromFields = candidate.matchFields.length * 15;
+   567→    if (candidateEvidence.length > 0) {
+   568→      const avgReliability = candidateEvidence.reduce((sum, e) => sum + e.reliabilityScore, 0) / candidateEvidence.length;
+   569→      const avgRelevance = candidateEvidence.reduce((sum, e) => sum + e.relevanceScore, 0) / candidateEvidence.length;
+   570→      candidate.confidence = clampScore(avgReliability * 0.4 + avgRelevance * 0.4 + Math.min(candidateEvidence.length * 8, 20) + baseFromFields);
+   571→    } else {
+   572→      // Even without linked evidence, boost from match fields
+   573→      candidate.confidence = clampScore(30 + baseFromFields);
+   574→    }
+   575→    candidate.verifiedStatus = candidate.confidence >= 80 ? 'verified' : candidate.confidence >= 50 ? 'possible' : 'unverified';
+   576→  }
+   577→
+   578→  // --- Stage 5: Confidence Calculation ---
+   579→  callbacks.onProgress('confidence', 'Calculating confidence scores...', 72);
+   580→  // Include phone_validation evidence in source count
+   581→  const phoneEvCount = allEvidence.filter(e => e.sourceType === 'phone_validation').length;
+   582→  const overallConfidence = candidates.length > 0
+   583→    ? clampScore(
+   584→        candidates[0].confidence * 0.7 +
+   585→        Math.min((candidates[0].evidence?.length || 0) * 4, 20) +
+   586→        (phoneEvCount > 0 ? 10 : 0)
+   587→      )
+   588→    : 0;
+   589→
+   590→  // --- Stage 6: AI Assessment ---
+   591→  callbacks.onProgress('ai_analysis', 'Running AI analysis...', 85);
+   592→  const baseInvestigation: Investigation = {
+   593→    id,
+   594→    status: 'completed',
+   595→    depth: config.depth,
+   596→    isBatch: false,
+   597→    batchId: null,
+   598→    inputPhone: config.phone || null,
+   599→    inputPhoneNormalized: config.phoneNormalized || null,
+   600→    inputEmail: config.email || null,
+   601→    inputName: candidates[0]?.name || null,
+   602→    inputBusiness: null,
+   603→    inputRegion: null,
+   604→    inputCountry: country || null,
+   605→    inputState: null,
+   606→    inputCity: phoneResult.phoneInfo?.location ? String(phoneResult.phoneInfo.location) : null,
+   607→    summary: `Investigation completed for ${config.phone || config.email || 'unknown identifier'}. ${candidates.length} identity candidate${candidates.length !== 1 ? 's' : ''} found.`,
+   608→    identityCount: candidates.length,
+   609→    evidenceCount: allEvidence.length,
+   610→    sourceCount: new Set(allEvidence.map(e => e.sourceName)).size,
+   611→    confidence: overallConfidence,
+   612→    hasConflicts: allEvidence.some(e => e.verificationStatus === 'conflicting'),
+   613→    locationStatus: 'unavailable',
+   614→    isDemoData: false,
+   615→    startedAt: now,
+   616→    completedAt: timestampNow(),
+   617→    createdAt: now,
+   618→    updatedAt: timestampNow(),
+   619→    candidates,
+   620→    evidence: updatedEvidence,
+   621→    locations: [],
+   622→    timeline: allTimeline,
+   623→  };
+   624→
+   625→  const { aiAssessment, timeline: aiTimeline } = await stageAIAnalysis(baseInvestigation);
+   626→  allTimeline.push(...aiTimeline);
+   627→  baseInvestigation.timeline = allTimeline;
+   628→
+   629→  // --- Stage 7: Finalize ---
+   630→  callbacks.onProgress('completing', 'Generating report...', 93);
+   631→
+   632→  if (aiAssessment) {
+   633→    // Sanity cap: AI sometimes over-estimates confidence with minimal evidence.
+   634→    // If the only evidence source is phone_validation, cap confidence at 45.
+   635→    const nonPhoneEvidence = allEvidence.filter(e => e.sourceType !== 'phone_validation');
+   636→    const webEvidence = nonPhoneEvidence.filter(e => e.sourceType === 'web_search' && e.relevanceScore >= 60);
+   637→    let aiScore = aiAssessment.confidence.score;
+   638→    if (nonPhoneEvidence.length === 0 && webEvidence.length === 0) {
+   639→      // Only phone validation — cap at LOW range
+   640→      aiScore = Math.min(aiScore, 45);
+   641→      aiAssessment.confidence.level = 'LOW';
+   642→      aiAssessment.confidence.explanation = 'Only phone number validation was available. No web sources or public records linked a specific identity to this number. ' + (aiAssessment.confidence.explanation || '');
+   643→    } else if (webEvidence.length < 2) {
+   644→      // 0-1 relevant web results — cap at MODERATE
+   645→      aiScore = Math.min(aiScore, 65);
+   646→      if (aiAssessment.confidence.level === 'HIGH') {
+   647→        aiAssessment.confidence.level = 'MODERATE';
+   648→      }
+   649→    }
+   650→    baseInvestigation.confidence = aiScore;
+   651→    baseInvestigation.summary = aiAssessment.conclusion;
+   652→  }
+   653→
+   654→  // --- Stage 8: Extract geolocation from NumVerify for globe pins ---
+   655→  // NumVerify returns latitude/longitude for validated numbers
+   656→  if (phoneResult.phoneInfo && phoneResult.phoneInfo.valid) {
+   657→    const lat = parseFloat(phoneResult.phoneInfo.latitude as string);
+   658→    const lng = parseFloat(phoneResult.phoneInfo.longitude as string);
+   659→    if (!isNaN(lat) && !isNaN(lng)) {
+   660→      baseInvestigation.locations.push({
+   661→        id: `numverify-${id}`,
+   662→        deviceId: null,
+   663→        provider: 'NumVerify Geolocation',
+   664→        status: 'last_known',
+   665→        latitude: lat,
+   666→        longitude: lng,
+   667→        accuracy: null,
+   668→        address: String(phoneResult.phoneInfo.location || phoneResult.phoneInfo.country_name || ''),
+   669→        timestamp: timestampNow(),
+   670→        freshness: 'recent',
+   671→        deviceStatus: null,
+   672→        batteryLevel: null,
+   673→        networkType: null,
+   674→      });
+   675→      baseInvestigation.locationStatus = 'last_known';
+   676→    }
+   677→  }
+   678→
+   679→  callbacks.onProgress('completed', 'Investigation complete.', 100);
+   680→
+   681→  return { investigation: baseInvestigation, aiAssessment };
+   682→}
+   683→
