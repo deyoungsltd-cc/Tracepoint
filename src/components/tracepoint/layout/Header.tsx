@@ -51,10 +51,6 @@ export function Header() {
 
       <h1 className="text-[12px] font-medium text-foreground tracking-wide">{titles[currentView] || 'Tracepoint'}</h1>
 
-      {user.isDemo && (
-        <span className="intel-badge bg-[#c8a24e]/8 text-[#c8a24e] border border-[#c8a24e]/15">DEMO</span>
-      )}
-
       {isRunning && progress && (
         <div className="hidden sm:flex items-center gap-2 ml-1">
           <div className="progress-track w-20">

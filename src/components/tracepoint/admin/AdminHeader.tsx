@@ -16,12 +16,6 @@ export function AdminHeader({ title }: AdminHeaderProps) {
         {title}
       </h1>
 
-      {user?.isDemo && (
-        <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-accent text-[#c8a24e] border border-border">
-          Demo
-        </span>
-      )}
-
       <div className="flex-1" />
 
       {/* Search */}

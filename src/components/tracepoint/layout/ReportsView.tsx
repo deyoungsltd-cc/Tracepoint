@@ -68,7 +68,7 @@ export default function ReportsView() {
             {completed.map((inv) => (
               <div
                 key={inv.id}
-                className={`surface p-4 ${inv.isDemoData ? 'demo-mark relative' : ''}`}
+                className="surface p-4"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -77,11 +77,6 @@ export default function ReportsView() {
                       <span className="text-sm font-medium text-foreground truncate">
                         Report: {inv.inputName || inv.inputPhone || inv.inputEmail || inv.id.slice(0, 8)}
                       </span>
-                      {inv.isDemoData && (
-                        <span className="flex items-center gap-0.5 text-[9px] font-mono text-[#c8a24e] uppercase shrink-0">
-                          <AlertTriangle className="w-2.5 h-2.5" /> Demo
-                        </span>
-                      )}
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground ml-6">
                       <span className="flex items-center gap-1">

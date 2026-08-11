@@ -88,7 +88,7 @@ export default function InvestigationWorkspace() {
 
   // Auto-save to Supabase when investigation completes
   useEffect(() => {
-    if (currentInvestigation?.status === 'completed' && isSupabaseConfigured() && !currentInvestigation.isDemoData) {
+    if (currentInvestigation?.status === 'completed' && isSupabaseConfigured()) {
       saveInvestigation(currentInvestigation);
     }
   }, [currentInvestigation?.status]);
@@ -210,7 +210,7 @@ export default function InvestigationWorkspace() {
 
         {/* Results */}
         {isCompleted && currentInvestigation && (
-          <div className={`space-y-4 ${currentInvestigation.isDemoData ? 'demo-mark relative' : ''}`}>
+          <div className="space-y-4">
             {/* Confidence Score */}
             <div className="surface p-4 surface-highlight relative">
               <ConfidenceMeter score={currentInvestigation.confidence || 0} size="lg" showLabel={true} animated />

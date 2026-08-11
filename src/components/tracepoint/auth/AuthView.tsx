@@ -7,7 +7,7 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
 import { getProfile } from '@/lib/supabase/data';
 
 export default function AuthView() {
-  const { setDemoMode, login, isLoading } = useAuthStore();
+  const { login, isLoading } = useAuthStore();
   const { navigate } = useNavStore();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -97,11 +97,6 @@ export default function AuthView() {
     } catch (err: any) {
       setError(err.message || 'Google Auth failed');
     }
-  };
-
-  const handleDemo = () => {
-    setDemoMode();
-    navigate('dashboard');
   };
 
   return (
@@ -207,19 +202,6 @@ export default function AuthView() {
               {isLoading ? 'Authenticating...' : mode === 'login' ? 'Sign In' : 'Create Account'}
             </button>
           </form>
-        </div>
-
-        {/* Demo */}
-        <div className="mt-4">
-          <button
-            onClick={handleDemo}
-            className="w-full py-2 rounded border border-dashed border-[#c8a24e]/20 text-[#c8a24e] text-xs hover:bg-[#c8a24e]/4 transition-colors"
-          >
-            Enter Demo Mode
-          </button>
-          <p className="text-[10px] text-muted-foreground text-center mt-2">
-            Demo uses sample data marked DEMO DATA — NOT REAL
-          </p>
         </div>
       </div>
     </div>

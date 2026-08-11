@@ -292,7 +292,6 @@ export interface AppSettings {
   cloudinaryApiKey: string;
   cloudinaryApiSecret: string;
   mapboxToken: string;
-  demoMode: boolean;
  batchMaxSize: number;
  historicalLocationCount: number;
   locationFreshnessThresholds: {

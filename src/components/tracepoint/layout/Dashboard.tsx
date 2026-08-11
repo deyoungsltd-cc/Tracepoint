@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useNavStore, useInvestigationStore, useGlobeStore, useAdminStore } from '@/lib/store/app';
-import { Crosshair, Clock, Activity, Globe2, BarChart3, Database, Shield, Zap, Layers } from 'lucide-react';
+import { Crosshair, Clock, Activity, Globe2, BarChart3, Database, Shield, Layers } from 'lucide-react';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { listInvestigations } from '@/lib/supabase/data';
 import dynamic from 'next/dynamic';
@@ -75,7 +75,7 @@ function DashboardContent() {
   const adminStore = useAdminStore();
   const globe = useGlobeStore();
   const { investigations } = invStore;
-  const { loadDemoInvestigation, loadPersistedInvestigations } = invStore;
+  const { loadPersistedInvestigations } = invStore;
   const { providers } = adminStore;
   const { markers, setMarkers, arcs, setArcs } = globe;
   const { navigate, viewMode } = nav;
@@ -111,20 +111,7 @@ function DashboardContent() {
     }
   }, [dbStatus]);
 
-  useEffect(() => {
-    if (markers.length === 0) {
-      setMarkers([
-        { id: 'm1', lat: 37.77, lng: -122.42, label: 'San Francisco', type: 'identity' as const, confidence: 94 },
-        { id: 'm2', lat: 40.71, lng: -74.01, label: 'New York', type: 'business' as const, confidence: 87 },
-        { id: 'm3', lat: 51.51, lng: -0.13, label: 'London', type: 'source' as const, confidence: 72 },
-        { id: 'm4', lat: 6.52, lng: 3.38, label: 'Lagos', type: 'identity' as const, confidence: 65 },
-        { id: 'm5', lat: 52.52, lng: 13.41, label: 'Berlin', type: 'business' as const, confidence: 81 },
-      ]);
-      setArcs([
-        { id: 'a1', startLat: 37.77, startLng: -122.42, endLat: 51.51, endLng: -0.13 },
-      ]);
-    }
-  }, [markers.length, setMarkers, setArcs]);
+
 
   const completed = investigations.filter((i) => i.status === 'completed');
   const recent = completed.slice(0, 6);
@@ -186,12 +173,6 @@ function DashboardContent() {
             className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left"
           >
             <Layers className="w-3 h-3 shrink-0" /> Batch Lookup
-          </button>
-          <button
-            onClick={loadDemoInvestigation}
-            className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left"
-          >
-            <Zap className="w-3 h-3 shrink-0" /> Load Demo Data
           </button>
           <button
             onClick={() => navigate('history')}
@@ -329,7 +310,7 @@ function DashboardContent() {
                   <button
                     key={inv.id}
                     onClick={() => { invStore.selectInvestigation(inv.id); navigate('investigation-detail', inv.id); }}
-                    className={inv.isDemoData ? 'demo-mark relative' : ''}
+                    className={''}
                     style={{ width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: '#1a1e1b', cursor: 'pointer' }}
                   >
                     <div className="flex justify-between mb-0.5">

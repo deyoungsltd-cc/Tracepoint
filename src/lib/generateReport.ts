@@ -67,7 +67,7 @@ export function generateInvestigationReport(inv: Investigation, ai: AIAssessment
   .recommendation { padding: 4px 0; color: #444; }
   .recommendation::before { content: '→ '; color: #c8a24e; }
   .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e0e0e0; color: #999; font-size: 9px; display: flex; justify-content: space-between; }
-  .demo-watermark { color: #c8a24e; font-weight: 600; font-size: 10px; background: #fef9e7; padding: 2px 8px; border-radius: 3px; }
+
   .score-bar { display: inline-block; width: 60px; height: 6px; background: #e0e0e0; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
   .score-bar-fill { height: 100%; border-radius: 3px; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .page { padding: 24px; } }
@@ -79,7 +79,6 @@ export function generateInvestigationReport(inv: Investigation, ai: AIAssessment
   <div class="header">
     <h1>
       Investigation Report
-      ${inv.isDemoData ? '<span class="demo-watermark">DEMO DATA — NOT REAL</span>' : ''}
     </h1>
     <div class="meta">
       Target: <strong>${inv.inputName || inv.inputPhone || inv.inputEmail || 'Unknown'}</strong>

@@ -214,27 +214,6 @@
   border: 1px solid #23282360;
 }
 
-/* Demo watermark */
-.demo-mark {
-  position: relative;
-}
-.demo-mark::after {
-  content: 'DEMO DATA \2014 NOT REAL';
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 0.5rem;
-  letter-spacing: 0.1em;
-  color: rgba(200, 162, 78, 0.45);
-  background: rgba(12, 14, 13, 0.9);
-  padding: 2px 6px;
-  border: 1px solid rgba(200, 162, 78, 0.15);
-  border-radius: 2px;
-  pointer-events: none;
-  z-index: 10;
-}
-
 /* Progress bar */
 .progress-track {
   background: #1a1e1b;

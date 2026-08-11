@@ -384,18 +384,6 @@ function OverviewTab() {
 
   return (
     <div className="space-y-5">
-      {/* Demo watermark */}
-      {inv.isDemoData && (
-        <div className="tp-demo-watermark tp-panel rounded-sm p-3 border-[#f59e0b]/30">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-[#f59e0b] tp-pulse" />
-            <span className="tp-hud text-xs text-[#f59e0b]">
-              DEMO DATA — THIS INVESTIGATION USES SIMULATED RESULTS
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Executive summary */}
       <div className="tp-panel rounded-sm p-5">
         <p className="tp-hud text-xs mb-2">EXECUTIVE SUMMARY</p>
@@ -1036,7 +1024,7 @@ function EmptyState({ message }: { message: string }) {
       </div>
       <p className="text-sm text-[#5a6a5a] text-center">{message}</p>
       <p className="tp-hud text-[0.55rem] text-[#3a4a3a]">
-        NO DATA AVAILABLE IN DEMO MODE
+        No investigation selected
       </p>
     </div>
   );

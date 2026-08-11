@@ -64,12 +64,6 @@ export function generatePdfReport(inv: Investigation, ai: AIAssessment | null): 
   doc.setTextColor(...DARK);
   doc.text('Investigation Report', marginL, y);
 
-  if (inv.isDemoData) {
-    doc.setFontSize(8);
-    doc.setTextColor(...GOLD);
-    doc.text('DEMO DATA - NOT REAL', marginL + 85, y);
-  }
-
   y += 8;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);

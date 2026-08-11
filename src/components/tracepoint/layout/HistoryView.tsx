@@ -215,7 +215,7 @@ export default function HistoryView() {
             {filtered.map((inv) => (
               <div
                 key={inv.id}
-                className={`surface p-4 hover:bg-accent/60 transition-colors ${inv.isDemoData ? 'demo-mark relative' : ''}`}
+                className="surface p-4 hover:bg-accent/60 transition-colors"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -223,11 +223,6 @@ export default function HistoryView() {
                       <span className="text-sm font-medium text-foreground truncate">
                         {inv.inputName || inv.inputPhone || inv.inputEmail || 'Unknown Target'}
                       </span>
-                      {inv.isDemoData && (
-                        <span className="flex items-center gap-0.5 text-[9px] font-mono text-[#c8a24e] uppercase">
-                          <AlertTriangle className="w-2.5 h-2.5" /> Demo
-                        </span>
-                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       {inv.inputPhone && (

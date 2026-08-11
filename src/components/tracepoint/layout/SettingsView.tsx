@@ -144,7 +144,7 @@ export default function SettingsView() {
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Session</span>
-            <span className="text-foreground">{user?.isDemo ? 'Demo Mode' : 'Authenticated'}</span>
+            <span className="text-foreground">Authenticated</span>
           </div>
         </div>
 
