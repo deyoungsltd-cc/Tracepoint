@@ -421,6 +421,31 @@ export async function runRealInvestigation(
     baseInvestigation.summary = aiAssessment.conclusion;
   }
 
+  // --- Stage 7: Extract geolocation from NumVerify for globe pins ---
+  // NumVerify returns latitude/longitude for validated numbers
+  if (phoneResult.phoneInfo && phoneResult.phoneInfo.valid) {
+    const lat = parseFloat(phoneResult.phoneInfo.latitude as string);
+    const lng = parseFloat(phoneResult.phoneInfo.longitude as string);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      baseInvestigation.locations.push({
+        id: `numverify-${id}`,
+        deviceId: null,
+        provider: 'NumVerify Geolocation',
+        status: 'last_known',
+        latitude: lat,
+        longitude: lng,
+        accuracy: null,
+        address: String(phoneResult.phoneInfo.location || phoneResult.phoneInfo.country_name || ''),
+        timestamp: timestampNow(),
+        freshness: 'recent',
+        deviceStatus: null,
+        batteryLevel: null,
+        networkType: null,
+      });
+      baseInvestigation.locationStatus = 'last_known';
+    }
+  }
+
   callbacks.onProgress('completed', 'Investigation complete.', 100);
 
   return { investigation: baseInvestigation, aiAssessment };

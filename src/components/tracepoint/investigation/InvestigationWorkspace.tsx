@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useInvestigationStore, useNavStore, useSettingsStore } from '@/lib/store/app';
 import { Crosshair, Upload, Zap, Target, Shield, Globe, ChevronDown } from 'lucide-react';
 import type { InvestigationDepth } from '@/lib/types';
+import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { saveInvestigation } from '@/lib/supabase/data';
 
@@ -210,23 +211,24 @@ export default function InvestigationWorkspace() {
         {/* Results */}
         {isCompleted && currentInvestigation && (
           <div className={`space-y-4 ${currentInvestigation.isDemoData ? 'demo-mark relative' : ''}`}>
+            {/* Confidence Score */}
+            <div className="surface p-4 surface-highlight relative">
+              <ConfidenceMeter score={currentInvestigation.confidence || 0} size="lg" showLabel={true} animated />
+              {currentInvestigation.summary && (
+                <p className="text-xs text-muted-foreground mt-3 leading-relaxed">{currentInvestigation.summary}</p>
+              )}
+            </div>
+
             {/* Stats Row */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {[
                 { label: 'Identities', value: currentInvestigation.identityCount },
                 { label: 'Evidence', value: currentInvestigation.evidenceCount },
                 { label: 'Sources', value: currentInvestigation.sourceCount },
-                { label: 'Confidence', value: `${currentInvestigation.confidence || 0}%` },
               ].map((s) => (
                 <div key={s.label} className="surface p-3">
                   <div className="mono-label text-[9px]">{s.label}</div>
-                  <div className={`text-lg font-semibold font-mono mt-0.5 ${
-                    s.label === 'Confidence'
-                      ? (currentInvestigation.confidence && currentInvestigation.confidence >= 80 ? 'text-[#4a9e5a]' : currentInvestigation.confidence && currentInvestigation.confidence >= 50 ? 'text-[#c8a24e]' : 'text-muted-foreground')
-                      : 'text-foreground'
-                  }`}>
-                    {s.value}
-                  </div>
+                  <div className="text-lg font-semibold font-mono mt-0.5 text-foreground">{s.value}</div>
                 </div>
               ))}
             </div>
