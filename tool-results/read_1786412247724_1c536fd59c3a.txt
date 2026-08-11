@@ -1,0 +1,672 @@
+     1→import { create } from 'zustand';
+     2→import type {
+     3→  AppView,
+     4→  ViewMode,
+     5→  Investigation,
+     6→  InvestigationProgress,
+     7→  User,
+     8→  AppSettings,
+     9→  ProviderStatus,
+    10→  SecurityEvent,
+    11→  AuditEvent,
+    12→  GlobeMarker,
+    13→  GlobeArc,
+    14→  DeviceAuthorization,
+    15→  FeatureFlag,
+    16→  AIAssessment,
+    17→} from '@/lib/types';
+    18→import { runRealInvestigation } from '@/lib/api/pipeline';
+    19→import { saveInvestigation } from '@/lib/supabase/data';
+    20→import { isSupabaseConfigured } from '@/lib/supabase/client';
+    21→import { saveToLocal, loadFromLocal, deleteFromLocal } from '@/lib/localStorage';
+    22→
+    23→// --- Auth Store ---
+    24→interface AuthStore {
+    25→  user: User | null;
+    26→  isAuthenticated: boolean;
+    27→  isLoading: boolean;
+    28→  login: (email: string, password: string) => Promise<void>;
+    29→  register: (email: string, password: string, name: string) => Promise<void>;
+    30→  logout: () => void;
+    31→  setDemoMode: () => void;
+    32→}
+    33→
+    34→// --- Navigation Store ---
+    35→interface NavStore {
+    36→  currentView: AppView;
+    37→  selectedInvestigationId: string | null;
+    38→  sidebarOpen: boolean;
+    39→  viewMode: ViewMode;
+    40→  navigate: (view: AppView, investigationId?: string) => void;
+    41→  setViewMode: (mode: ViewMode) => void;
+    42→  toggleSidebar: () => void;
+    43→  setSidebarOpen: (open: boolean) => void;
+    44→}
+    45→
+    46→// --- Investigation Store ---
+    47→interface InvestigationStore {
+    48→  investigations: Investigation[];
+    49→  currentInvestigation: Investigation | null;
+    50→  progress: InvestigationProgress | null;
+    51→  isRunning: boolean;
+    52→  aiAssessment: AIAssessment | null;
+    53→  startInvestigation: (query: Record<string, string>) => Promise<void>;
+    54→  startBatchInvestigation: (file: File) => Promise<void>;
+    55→  selectInvestigation: (id: string) => void;
+    56→  deleteInvestigation: (id: string) => void;
+    57→  clearCurrent: () => void;
+    58→  loadDemoInvestigation: () => void;
+    59→  loadPersistedInvestigations: () => void;
+    60→}
+    61→
+    62→// --- Settings Store ---
+    63→interface SettingsStore {
+    64→  settings: AppSettings;
+    65→  updateSettings: (partial: Partial<AppSettings>) => void;
+    66→  loadSettings: () => void;
+    67→}
+    68→
+    69→// --- Admin Store ---
+    70→interface AdminStore {
+    71→  providers: ProviderStatus[];
+    72→  securityEvents: SecurityEvent[];
+    73→  auditEvents: AuditEvent[];
+    74→  deviceAuthorizations: DeviceAuthorization[];
+    75→  featureFlags: FeatureFlag[];
+    76→  loadAdminData: () => void;
+    77→}
+    78→
+    79→// --- Globe Store ---
+    80→interface GlobeStore {
+    81→  markers: GlobeMarker[];
+    82→  arcs: GlobeArc[];
+    83→  focusedLocation: { lat: number; lng: number } | null;
+    84→  setMarkers: (markers: GlobeMarker[]) => void;
+    85→  addMarker: (marker: GlobeMarker) => void;
+    86→  clearMarkers: () => void;
+    87→  setArcs: (arcs: GlobeArc[]) => void;
+    88→  focusLocation: (lat: number, lng: number) => void;
+    89→  clearFocus: () => void;
+    90→  addInvestigationMarkers: (investigation: Investigation) => void;
+    91→}
+    92→
+    93→// ============================================================
+    94→// AUTH STORE
+    95→// ============================================================
+    96→
+    97→export const useAuthStore = create<AuthStore>((set) => ({
+    98→  user: null,
+    99→  isAuthenticated: false,
+   100→  isLoading: false,
+   101→
+   102→  login: async (_email: string, _password: string) => {
+   103→    set({ isLoading: true });
+   104→    await new Promise((r) => setTimeout(r, 800));
+   105→    set({
+   106→      user: {
+   107→        id: 'demo-user-001',
+   108→        email: _email || 'analyst@tracepoint.io',
+   109→        displayName: 'Senior Analyst',
+   110→        role: 'admin',
+   111→        mfaEnabled: false,
+   112→        emailVerified: true,
+   113→        isDemo: true,
+   114→        createdAt: new Date().toISOString(),
+   115→      },
+   116→      isAuthenticated: true,
+   117→      isLoading: false,
+   118→    });
+   119→  },
+   120→
+   121→  register: async (_email: string, _password: string, name: string) => {
+   122→    set({ isLoading: true });
+   123→    await new Promise((r) => setTimeout(r, 1000));
+   124→    set({
+   125→      user: {
+   126→        id: 'new-user-001',
+   127→        email: _email,
+   128→        displayName: name,
+   129→        role: 'standard',
+   130→        mfaEnabled: false,
+   131→        emailVerified: false,
+   132→        isDemo: false,
+   133→        createdAt: new Date().toISOString(),
+   134→      },
+   135→      isAuthenticated: true,
+   136→      isLoading: false,
+   137→    });
+   138→  },
+   139→
+   140→  logout: () => {
+   141→    set({ user: null, isAuthenticated: false });
+   142→  },
+   143→
+   144→  setDemoMode: () => {
+   145→    set({
+   146→      user: {
+   147→        id: 'demo-user-001',
+   148→        email: 'demo@tracepoint.io',
+   149→        displayName: 'Demo Analyst',
+   150→        role: 'admin',
+   151→        mfaEnabled: false,
+   152→        emailVerified: true,
+   153→        isDemo: true,
+   154→        createdAt: new Date().toISOString(),
+   155→      },
+   156→      isAuthenticated: true,
+   157→    });
+   158→  },
+   159→}));
+   160→
+   161→// ============================================================
+   162→// NAVIGATION STORE
+   163→// ============================================================
+   164→
+   165→export const useNavStore = create<NavStore>((set) => ({
+   166→  currentView: 'login',
+   167→  selectedInvestigationId: null,
+   168→  sidebarOpen: true,
+   169→  viewMode: 'globe',
+   170→
+   171→  navigate: (view, investigationId) => {
+   172→    set({ currentView: view, selectedInvestigationId: investigationId || null });
+   173→  },
+   174→
+   175→  setViewMode: (mode) => set({ viewMode: mode }),
+   176→
+   177→  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+   178→
+   179→  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+   180→}));
+   181→
+   182→// ============================================================
+   183→// INVESTIGATION STORE
+   184→// ============================================================
+   185→
+   186→export const useInvestigationStore = create<InvestigationStore>((set, get) => ({
+   187→  investigations: [],
+   188→  currentInvestigation: null,
+   189→  progress: null,
+   190→  isRunning: false,
+   191→  aiAssessment: null,
+   192→
+   193→  startInvestigation: async (query: Record<string, string>) => {
+   194→    set({ isRunning: true, progress: { stage: 'initializing', progress: 0, message: 'Initializing investigation...', timestamp: new Date().toISOString() } });
+   195→    try {
+   196→      const { investigation, aiAssessment } = await runRealInvestigation(
+   197→        {
+   198→          phone: query.phone || undefined,
+   199→          phoneNormalized: query.phoneNormalized || undefined,
+   200→          email: query.email || undefined,
+   201→          country: query.country || undefined,
+   202→          depth: (query.depth as 'quick' | 'standard' | 'deep') || 'standard',
+   203→        },
+   204→        { onProgress: (stage, message, progress) => { set({ progress: { stage, progress, message, timestamp: new Date().toISOString() } }); } },
+   205→      );
+   206→      // Persist to localStorage always, to Supabase if configured
+   207→      saveToLocal(investigation);
+   208→      if (isSupabaseConfigured() && !investigation.isDemoData) { saveInvestigation(investigation).catch(() => {}); }
+   209→      // Add markers to globe
+   210→      useGlobeStore.getState().addInvestigationMarkers(investigation);
+   211→      set((state) => ({ investigations: [investigation, ...state.investigations], currentInvestigation: investigation, isRunning: false, progress: { stage: 'completed', progress: 100, message: 'Investigation complete.', timestamp: new Date().toISOString() }, aiAssessment }));
+   212→    } catch (err) {
+   213→      console.error('Investigation error:', err);
+   214→      set({ isRunning: false, progress: { stage: 'failed', progress: 0, message: 'Investigation failed. Try again.', timestamp: new Date().toISOString() } });
+   215→    }
+   216→  },
+   217→
+   218→  startBatchInvestigation: async (_file: File) => {
+   219→    set({ isRunning: true, progress: { stage: 'parsing', progress: 5, message: 'Parsing batch file...', timestamp: new Date().toISOString() } });
+   220→    await new Promise((r) => setTimeout(r, 2000));
+   221→    set({ progress: { stage: 'queued', progress: 10, message: '3 investigations queued for processing.', timestamp: new Date().toISOString() } });
+   222→    await new Promise((r) => setTimeout(r, 3000));
+   223→    set({ isRunning: false });
+   224→  },
+   225→
+   226→  selectInvestigation: (id) => {
+   227→    const inv = get().investigations.find((i) => i.id === id);
+   228→    if (inv) {
+   229→      set({
+   230→        currentInvestigation: inv,
+   231→        aiAssessment: generateDemoAIAssessment(inv),
+   232→      });
+   233→    }
+   234→  },
+   235→
+   236→  deleteInvestigation: (id) => {
+   237→    deleteFromLocal(id);
+   238→    set((state) => ({
+   239→      investigations: state.investigations.filter(i => i.id !== id),
+   240→      currentInvestigation: state.currentInvestigation?.id === id ? null : state.currentInvestigation,
+   241→    }));
+   242→  },
+   243→
+   244→  clearCurrent: () => set({ currentInvestigation: null, progress: null, aiAssessment: null }),
+   245→
+   246→  loadDemoInvestigation: () => {
+   247→    const now = new Date().toISOString();
+   248→    const demoInvestigation: Investigation = {
+   249→      id: `demo-${Date.now()}`,
+   250→      status: 'completed',
+   251→      depth: 'deep',
+   252→      isBatch: false,
+   253→      batchId: null,
+   254→      inputPhone: '+1 (555) 234-5678',
+   255→      inputPhoneNormalized: '+15552345678',
+   256→      inputEmail: 'j.doe@example.com',
+   257→      inputName: 'Jonathan Doe',
+   258→      inputBusiness: 'Doe Consulting Group',
+   259→      inputRegion: 'North America',
+   260→      inputCountry: 'US',
+   261→      inputState: 'California',
+   262→      inputCity: 'San Francisco',
+   263→      summary: 'Deep investigation completed. Two identity candidates identified. Primary candidate verified across 3 independent public sources with 94% confidence.',
+   264→      identityCount: 2,
+   265→      evidenceCount: 12,
+   266→      sourceCount: 7,
+   267→      confidence: 94,
+   268→      hasConflicts: false,
+   269→      locationStatus: 'last_known',
+   270→      isDemoData: true,
+   271→      startedAt: new Date(Date.now() - 120000).toISOString(),
+   272→      completedAt: now,
+   273→      createdAt: new Date(Date.now() - 125000).toISOString(),
+   274→      updatedAt: now,
+   275→      candidates: [],
+   276→      evidence: [],
+   277→      locations: [
+   278→        {
+   279→          id: 'loc-1',
+   280→          deviceId: 'iphone-15-pro',
+   281→          provider: 'apple_find_my',
+   282→          status: 'last_known',
+   283→          latitude: 37.7749,
+   284→          longitude: -122.4194,
+   285→          accuracy: 65,
+   286→          address: 'Financial District, San Francisco, CA',
+   287→          timestamp: new Date(Date.now() - 3600000).toISOString(),
+   288→          freshness: 'recent',
+   289→          deviceStatus: 'offline',
+   290→          batteryLevel: 42,
+   291→          networkType: null,
+   292→        },
+   293→      ],
+   294→      timeline: [],
+   295→    };
+   296→    demoInvestigation.candidates = generateDemoCandidates(demoInvestigation.id);
+   297→    demoInvestigation.evidence = generateDemoEvidence(demoInvestigation.id);
+   298→    demoInvestigation.timeline = generateDemoTimeline(demoInvestigation.id);
+   299→    saveToLocal(demoInvestigation);
+   300→    useGlobeStore.getState().addInvestigationMarkers(demoInvestigation);
+   301→    set((state) => ({
+   302→      investigations: [demoInvestigation, ...state.investigations],
+   303→      currentInvestigation: demoInvestigation,
+   304→      aiAssessment: generateDemoAIAssessment(demoInvestigation),
+   305→    }));
+   306→  },
+   307→
+   308→  loadPersistedInvestigations: () => {
+   309→    const local = loadFromLocal();
+   310→    if (local.length > 0) {
+   311→      set((state) => {
+   312→        const existing = new Set(state.investigations.map(i => i.id));
+   313→        const newInvs = local.filter(i => !existing.has(i.id));
+   314→        return { investigations: [...newInvs, ...state.investigations] };
+   315→      });
+   316→    }
+   317→  },
+   318→}));
+   319→
+   320→// ============================================================
+   321→// SETTINGS STORE
+   322→// ============================================================
+   323→
+   324→export const useSettingsStore = create<SettingsStore>((set) => ({
+   325→  settings: {
+   326→    aiProvider: 'openai' as const,
+   327→    aiApiKey: '',
+   328→    aiModel: 'gpt-4o',
+   329→    serperApiKey: '',
+   330→    numverifyApiKey: '',
+   331→    mapboxToken: '',
+   332→    demoMode: false,
+   333→    batchMaxSize: 10,
+   334→    historicalLocationCount: 5,
+   335→    locationFreshnessThresholds: {
+   336→      live: 5,
+   337→      recent: 60,
+   338→      today: 1440,
+   339→      old: 10080,
+   340→    },
+   341→  },
+   342→  updateSettings: (partial) => set((s) => ({ settings: { ...s.settings, ...partial } })),
+   343→  loadSettings: () => {},
+   344→}));
+   345→
+   346→// ============================================================
+   347→// ADMIN STORE
+   348→// ============================================================
+   349→
+   350→export const useAdminStore = create<AdminStore>((set) => ({
+   351→  providers: [
+   352→    { name: 'OpenAI (AI)', category: 'ai', isEnabled: true, health: 'unknown', lastChecked: null, latencyMs: null },
+   353→    { name: 'Apple Find My', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
+   354→    { name: 'Google Find My Device', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
+   355→    { name: 'Samsung SmartThings', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
+   356→    { name: 'Custom/BYO Provider', category: 'location', isEnabled: false, health: 'unknown', lastChecked: null, latencyMs: null },
+   357→    { name: 'NumVerify', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 120 },
+   358→    { name: 'Web Search (Serper)', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 320 },
+   359→    { name: 'Business Directory', category: 'intelligence', isEnabled: true, health: 'healthy', lastChecked: new Date().toISOString(), latencyMs: 180 },
+   360→  ],
+   361→  securityEvents: [
+   362→    { id: 'se-1', eventType: 'failed_login', severity: 'low', details: 'Failed login attempt from 192.168.1.45', ip: '192.168.1.45', resolved: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
+   363→    { id: 'se-2', eventType: 'rate_limit', severity: 'medium', details: 'Rate limit exceeded for investigation API', ip: null, resolved: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
+   364→  ],
+   365→  auditEvents: [
+   366→    { id: 'ae-1', action: 'investigation.started', resource: 'inv-001', details: 'Deep investigation started for +15552345678', userId: 'demo-user-001', createdAt: new Date(Date.now() - 7200000).toISOString() },
+   367→    { id: 'ae-2', action: 'settings.updated', resource: 'settings', details: 'AI provider changed to OpenAI', userId: 'demo-user-001', createdAt: new Date(Date.now() - 3600000).toISOString() },
+   368→    { id: 'ae-3', action: 'investigation.completed', resource: 'inv-001', details: 'Investigation completed with 2 candidates', userId: 'demo-user-001', createdAt: new Date(Date.now() - 6000000).toISOString() },
+   369→  ],
+   370→  deviceAuthorizations: [],
+   371→  featureFlags: [
+   372→    { key: 'demo_mode', isEnabled: true, config: { label: 'DEMO DATA — NOT REAL' } },
+   373→    { key: 'batch_investigations', isEnabled: true, config: { maxSize: 10 } },
+   374→    { key: 'ai_assistant', isEnabled: true, config: null },
+   375→    { key: '3d_globe', isEnabled: true, config: { autoRotate: true } },
+   376→    { key: 'pdf_reports', isEnabled: true, config: null },
+   377→    { key: 'device_fingerprint', isEnabled: true, config: null },
+   378→  ],
+   379→  loadAdminData: () => {},
+   380→}));
+   381→
+   382→// ============================================================
+   383→// GLOBE STORE
+   384→// ============================================================
+   385→
+   386→export const useGlobeStore = create<GlobeStore>((set, get) => ({
+   387→  markers: [],
+   388→  arcs: [],
+   389→  focusedLocation: null,
+   390→  setMarkers: (markers) => set({ markers }),
+   391→  addMarker: (marker) => set((s) => ({ markers: [...s.markers, marker] })),
+   392→  clearMarkers: () => set({ markers: [], arcs: [] }),
+   393→  setArcs: (arcs) => set({ arcs }),
+   394→  focusLocation: (lat, lng) => set({ focusedLocation: { lat, lng } }),
+   395→  clearFocus: () => set({ focusedLocation: null }),
+   396→
+   397→  addInvestigationMarkers: (investigation: Investigation) => {
+   398→    const newMarkers: GlobeMarker[] = [];
+   399→    const newArcs: GlobeArc[] = [];
+   400→
+   401→    // Add candidate location markers
+   402→    for (const candidate of investigation.candidates) {
+   403→      if (candidate.location) {
+   404→        // Try to extract a rough lat/lng from location name
+   405→        const latlng = roughGeocode(candidate.location);
+   406→        if (latlng) {
+   407→          newMarkers.push({
+   408→            id: `cand-${candidate.id}`,
+   409→            lat: latlng.lat,
+   410→            lng: latlng.lng,
+   411→            label: candidate.name || candidate.location,
+   412→            type: 'identity',
+   413→            confidence: candidate.confidence,
+   414→            investigationId: investigation.id,
+   415→          });
+   416→        }
+   417→      }
+   418→    }
+   419→
+   420→    // Add device location markers
+   421→    for (const loc of investigation.locations) {
+   422→      if (loc.latitude && loc.longitude) {
+   423→        newMarkers.push({
+   424→          id: `loc-${loc.id}`,
+   425→          lat: loc.latitude,
+   426→          lng: loc.longitude,
+   427→          label: loc.address || loc.provider,
+   428→          type: 'device',
+   429→          confidence: undefined,
+   430→          investigationId: investigation.id,
+   431→        });
+   432→      }
+   433→    }
+   434→
+   435→    // Create arcs between markers
+   436→    if (newMarkers.length >= 2) {
+   437→      for (let i = 0; i < newMarkers.length - 1; i++) {
+   438→        newArcs.push({
+   439→          id: `arc-${investigation.id}-${i}`,
+   440→          startLat: newMarkers[i].lat,
+   441→          startLng: newMarkers[i].lng,
+   442→          endLat: newMarkers[i + 1].lat,
+   443→          endLng: newMarkers[i + 1].lng,
+   444→          color: '#c8a24e',
+   445→          animated: true,
+   446→        });
+   447→      }
+   448→    }
+   449→
+   450→    if (newMarkers.length > 0) {
+   451→      set((s) => ({
+   452→        markers: [...newMarkers, ...s.markers],
+   453→        arcs: [...newArcs, ...s.arcs],
+   454→        focusedLocation: newMarkers[0] ? { lat: newMarkers[0].lat, lng: newMarkers[0].lng } : s.focusedLocation,
+   455→      }));
+   456→    }
+   457→  },
+   458→}));
+   459→
+   460→// Rough geocoding from location strings — uses known city coordinates
+   461→function roughGeocode(location: string): { lat: number; lng: number } | null {
+   462→  const cities: Record<string, { lat: number; lng: number }> = {
+   463→    'san francisco': { lat: 37.7749, lng: -122.4194 },
+   464→    'los angeles': { lat: 34.0522, lng: -118.2437 },
+   465→    'new york': { lat: 40.7128, lng: -74.006 },
+   466→    'london': { lat: 51.5074, lng: -0.1278 },
+   467→    'berlin': { lat: 52.52, lng: 13.405 },
+   468→    'paris': { lat: 48.8566, lng: 2.3522 },
+   469→    'tokyo': { lat: 35.6762, lng: 139.6503 },
+   470→    'sydney': { lat: -33.8688, lng: 151.2093 },
+   471→    'dubai': { lat: 25.2048, lng: 55.2708 },
+   472→    'lagos': { lat: 6.5244, lng: 3.3792 },
+   473→    'singapore': { lat: 1.3521, lng: 103.8198 },
+   474→    'mumbai': { lat: 19.076, lng: 72.8777 },
+   475→    'toronto': { lat: 43.6532, lng: -79.3832 },
+   476→    'chicago': { lat: 41.8781, lng: -87.6298 },
+   477→    'houston': { lat: 29.7604, lng: -95.3698 },
+   478→    'miami': { lat: 25.7617, lng: -80.1918 },
+   479→    'seattle': { lat: 47.6062, lng: -122.3321 },
+   480→    'austin': { lat: 30.2672, lng: -97.7431 },
+   481→    'denver': { lat: 39.7392, lng: -104.9903 },
+   482→    'atlanta': { lat: 33.749, lng: -84.388 },
+   483→    'boston': { lat: 42.3601, lng: -71.0589 },
+   484→    'dallas': { lat: 32.7767, lng: -96.797 },
+   485→    'phoenix': { lat: 33.4484, lng: -112.074 },
+   486→    'philadelphia': { lat: 39.9526, lng: -75.1652 },
+   487→    'washington': { lat: 38.9072, lng: -77.0369 },
+   488→    'nigeria': { lat: 9.082, lng: 8.6753 },
+   489→    'germany': { lat: 51.1657, lng: 10.4515 },
+   490→    'france': { lat: 46.6034, lng: 1.8883 },
+   491→    'japan': { lat: 36.2048, lng: 138.2529 },
+   492→    'india': { lat: 20.5937, lng: 78.9629 },
+   493→    'brazil': { lat: -14.235, lng: -51.9253 },
+   494→    'china': { lat: 35.8617, lng: 104.1954 },
+   495→    'australia': { lat: -25.2744, lng: 133.7751 },
+   496→    'canada': { lat: 56.1304, lng: -106.3468 },
+   497→    'united states': { lat: 37.0902, lng: -95.7129 },
+   498→    'uk': { lat: 55.3781, lng: -3.436 },
+   499→    'united kingdom': { lat: 55.3781, lng: -3.436 },
+   500→    'california': { lat: 36.7783, lng: -119.4179 },
+   501→    'texas': { lat: 31.9686, lng: -99.9018 },
+   502→    'new york': { lat: 43.2994, lng: -74.2179 },
+   503→    'florida': { lat: 27.6648, lng: -81.5158 },
+   504→  };
+   505→
+   506→  const lower = location.toLowerCase();
+   507→  for (const [city, coords] of Object.entries(cities)) {
+   508→    if (lower.includes(city)) return coords;
+   509→  }
+   510→  return null;
+   511→}
+   512→
+   513→// ============================================================
+   514→// DEMO DATA GENERATORS
+   515→// ============================================================
+   516→
+   517→function generateDemoCandidates(investigationId: string) {
+   518→  return [
+   519→    {
+   520→      id: `cand-1-${investigationId}`,
+   521→      rank: 1,
+   522→      name: 'Jonathan Doe',
+   523→      phone: '+1 (555) 234-5678',
+   524→      email: 'j.doe@example.com',
+   525→      business: 'Doe Consulting Group',
+   526→      website: 'https://doeconsulting.example.com',
+   527→      location: 'San Francisco, CA',
+   528→      photoUrl: null,
+   529→      confidence: 94,
+   530→      verifiedStatus: 'verified' as const,
+   531→      matchFields: ['phone', 'email', 'business', 'location'],
+   532→      evidence: [],
+   533→    },
+   534→    {
+   535→      id: `cand-2-${investigationId}`,
+   536→      rank: 2,
+   537→      name: 'J. Doe',
+   538→      phone: '+1 (555) 234-5678',
+   539→      email: null,
+   540→      business: 'JD Enterprises',
+   541→      website: null,
+   542→      location: 'Los Angeles, CA',
+   543→      photoUrl: null,
+   544→      confidence: 41,
+   545→      verifiedStatus: 'possible' as const,
+   546→      matchFields: ['phone'],
+   547→      evidence: [],
+   548→    },
+   549→  ];
+   550→}
+   551→
+   552→function generateDemoEvidence(investigationId: string) {
+   553→  return [
+   554→    {
+   555→      id: `ev-1-${investigationId}`,
+   556→      claim: 'Phone number +1 (555) 234-5678 is associated with Doe Consulting Group',
+   557→      sourceUrl: 'https://doeconsulting.example.com/contact',
+   558→      sourceName: 'Doe Consulting Group — Official Website',
+   559→      sourceType: 'official_website' as const,
+   560→      discoveredAt: new Date().toISOString(),
+   561→      publishedAt: '2026-01-15T00:00:00Z',
+   562→      excerpt: 'Contact us at +1 (555) 234-5678 or email j.doe@example.com',
+   563→      reliabilityScore: 95,
+   564→      relevanceScore: 98,
+   565→      freshnessScore: 85,
+   566→      verificationStatus: 'verified' as const,
+   567→      candidateId: `cand-1-${investigationId}`,
+   568→    },
+   569→    {
+   570→      id: `ev-2-${investigationId}`,
+   571→      claim: 'Jonathan Doe is listed as CEO of Doe Consulting Group',
+   572→      sourceUrl: 'https://businessdir.example.com/doe-consulting',
+   573→      sourceName: 'Pacific Business Directory',
+   574→      sourceType: 'business_directory' as const,
+   575→      discoveredAt: new Date().toISOString(),
+   576→      publishedAt: '2026-03-20T00:00:00Z',
+   577→      excerpt: 'Doe Consulting Group, CEO: Jonathan Doe, San Francisco, CA',
+   578→      reliabilityScore: 88,
+   579→      relevanceScore: 95,
+   580→      freshnessScore: 78,
+   581→      verificationStatus: 'verified' as const,
+   582→      candidateId: `cand-1-${investigationId}`,
+   583→    },
+   584→    {
+   585→      id: `ev-3-${investigationId}`,
+   586→      claim: 'Professional profile for Jonathan Doe matches phone and business',
+   587→      sourceUrl: 'https://linkedin.example.com/in/jondoe',
+   588→      sourceName: 'Professional Network Profile',
+   589→      sourceType: 'professional_profile' as const,
+   590→      discoveredAt: new Date().toISOString(),
+   591→      publishedAt: '2025-11-10T00:00:00Z',
+   592→      excerpt: 'Jonathan Doe — CEO at Doe Consulting Group — San Francisco Bay Area',
+   593→      reliabilityScore: 82,
+   594→      relevanceScore: 92,
+   595→      freshnessScore: 72,
+   596→      verificationStatus: 'corroborated' as const,
+   597→      candidateId: `cand-1-${investigationId}`,
+   598→    },
+   599→    {
+   600→      id: `ev-4-${investigationId}`,
+   601→      claim: 'Phone number +1 (555) 234-5678 also appears in a listing for JD Enterprises',
+   602→      sourceUrl: 'https://ladir.example.com/jd-enterprises',
+   603→      sourceName: 'LA Business Registry',
+   604→      sourceType: 'business_directory' as const,
+   605→      discoveredAt: new Date().toISOString(),
+   606→      publishedAt: '2026-06-01T00:00:00Z',
+   607→      excerpt: 'JD Enterprises, Contact: +1 (555) 234-5678, Los Angeles, CA',
+   608→      reliabilityScore: 75,
+   609→      relevanceScore: 70,
+   610→      freshnessScore: 65,
+   611→      verificationStatus: 'possible' as const,
+   612→      candidateId: `cand-2-${investigationId}`,
+   613→    },
+   614→    {
+   615→      id: `ev-5-${investigationId}`,
+   616→      claim: 'Doe Consulting Group registered at 100 Market Street, San Francisco, CA',
+   617→      sourceUrl: 'https://sos.ca.gov/business-search/doe-consulting',
+   618→      sourceName: 'California Secretary of State',
+   619→      sourceType: 'government_record' as const,
+   620→      discoveredAt: new Date().toISOString(),
+   621→      publishedAt: '2024-08-15T00:00:00Z',
+   622→      excerpt: 'Entity: Doe Consulting Group LLC, Agent: Jonathan Doe, Address: 100 Market St, SF, CA 94105',
+   623→      reliabilityScore: 98,
+   624→      relevanceScore: 88,
+   625→      freshnessScore: 55,
+   626→      verificationStatus: 'verified' as const,
+   627→      candidateId: `cand-1-${investigationId}`,
+   628→    },
+   629→  ];
+   630→}
+   631→
+   632→function generateDemoTimeline(investigationId: string) {
+   633→  const base = Date.now() - 120000;
+   634→  return [
+   635→    { id: `tl-1-${investigationId}`, eventType: 'started', description: 'Investigation started', metadata: null, timestamp: new Date(base).toISOString() },
+   636→    { id: `tl-2-${investigationId}`, eventType: 'normalized', description: 'Phone normalized to E.164: +15552345678', metadata: null, timestamp: new Date(base + 5000).toISOString() },
+   637→    { id: `tl-3-${investigationId}`, eventType: 'discovery', description: '7 public sources discovered', metadata: { count: 7 }, timestamp: new Date(base + 15000).toISOString() },
+   638→    { id: `tl-4-${investigationId}`, eventType: 'candidates', description: '2 identity candidates created', metadata: { count: 2 }, timestamp: new Date(base + 45000).toISOString() },
+   639→    { id: `tl-5-${investigationId}`, eventType: 'corroboration', description: '3 sources corroborated candidate A (Jonathan Doe)', metadata: null, timestamp: new Date(base + 60000).toISOString() },
+   640→    { id: `tl-6-${investigationId}`, eventType: 'location', description: 'Location provider queried — last-known location retrieved', metadata: { provider: 'apple_find_my' }, timestamp: new Date(base + 80000).toISOString() },
+   641→    { id: `tl-7-${investigationId}`, eventType: 'completed', description: 'Investigation completed — 94% confidence for primary candidate', metadata: null, timestamp: new Date(base + 100000).toISOString() },
+   642→  ];
+   643→}
+   644→
+   645→function generateDemoAIAssessment(inv: Investigation): AIAssessment {
+   646→  const primaryCandidate = inv.candidates[0];
+   647→  const evidenceCount = inv.evidence.filter((e) => e.candidateId === primaryCandidate?.id).length;
+   648→  const conflicting = inv.evidence.filter((e) => e.verificationStatus === 'conflicting');
+   649→
+   650→  return {
+   651→    summary: `I found ${evidenceCount} public sources connecting the provided identifiers to ${primaryCandidate?.name || 'the primary candidate'}. ${evidenceCount >= 2 ? 'Multiple sources agree on the business association and professional identity.' : 'Limited corroborating sources available.'}`,
+   652→    conclusion: inv.confidence && inv.confidence >= 80
+   653→      ? `IDENTITY VERIFIED — ${inv.confidence}% confidence. ${evidenceCount} independent public sources corroborate the primary identity.`
+   654→      : inv.confidence && inv.confidence >= 50
+   655→        ? `IDENTITY PARTIALLY VERIFIED — ${inv.confidence}% confidence. Additional sources recommended.`
+   656→        : 'INSUFFICIENT EVIDENCE — NO IDENTITY ASSIGNED',
+   657→    confidence: {
+   658→      score: inv.confidence || 0,
+   659→      level: (inv.confidence && inv.confidence >= 80 ? 'HIGH' : inv.confidence && inv.confidence >= 50 ? 'MODERATE' : 'LOW') as AIAssessment['confidence']['level'],
+   660→      supportingEvidence: inv.evidence.filter((e) => e.verificationStatus === 'verified').map((e) => e.sourceName),
+   661→      conflictingEvidence: conflicting.map((e) => e.sourceName),
+   662→      explanation: `Confidence score derived from ${evidenceCount} evidence items across ${inv.sourceCount} independent sources. ${inv.hasConflicts ? 'Conflicting evidence was detected and factored into the score reduction.' : 'No conflicting evidence detected.'}`,
+   663→      lastVerified: new Date().toISOString(),
+   664→    },
+   665→    recommendations: inv.confidence && inv.confidence < 80
+   666→      ? ['Cross-reference with official government registry', 'Verify business registration directly', 'Check professional license databases']
+   667→      : ['Investigation findings are strong. Consider generating a formal report.'],
+   668→    missingEvidence: inv.confidence && inv.confidence < 90
+   669→      ? ['Official government ID verification', 'Financial regulatory records', 'Professional license confirmation']
+   670→      : [],
+   671→  };
+   672→}

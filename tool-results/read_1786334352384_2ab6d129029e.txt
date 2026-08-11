@@ -1,0 +1,715 @@
+     1→'use client';
+     2→
+     3→import { useState, useRef, useCallback } from 'react';
+     4→import {
+     5→  Phone,
+     6→  Mail,
+     7→  User,
+     8→  Building2,
+     9→  MapPin,
+    10→  Search,
+    11→  Upload,
+    12→  AlertTriangle,
+    13→  CheckCircle2,
+    14→  FileText,
+    15→  Target,
+    16→  Database,
+    17→  ChevronRight,
+    18→  Shield,
+    19→  Zap,
+    20→  Eye,
+    21→  Clock,
+    22→} from 'lucide-react';
+    23→import { Button } from '@/components/ui/button';
+    24→import { Input } from '@/components/ui/input';
+    25→import { Label } from '@/components/ui/label';
+    26→import {
+    27→  Select,
+    28→  SelectContent,
+    29→  SelectItem,
+    30→  SelectTrigger,
+    31→  SelectValue,
+    32→} from '@/components/ui/select';
+    33→import { Badge } from '@/components/ui/badge';
+    34→import { Separator } from '@/components/ui/separator';
+    35→import { useInvestigationStore } from '@/lib/store/app';
+    36→import type { InvestigationDepth } from '@/lib/types';
+    37→
+    38→// --- Phone normalization ---
+    39→function normalizePhone(phone: string): string {
+    40→  const digits = phone.replace(/\D/g, '');
+    41→  if (digits.length === 0) return '';
+    42→  if (digits.startsWith('1') && digits.length === 11) return `+${digits}`;
+    43→  return `+${digits}`;
+    44→}
+    45→
+    46→// --- Country list ---
+    47→const COUNTRIES = [
+    48→  { value: 'US', label: 'United States' },
+    49→  { value: 'CA', label: 'Canada' },
+    50→  { value: 'GB', label: 'United Kingdom' },
+    51→  { value: 'AU', label: 'Australia' },
+    52→  { value: 'DE', label: 'Germany' },
+    53→  { value: 'FR', label: 'France' },
+    54→  { value: 'JP', label: 'Japan' },
+    55→  { value: 'BR', label: 'Brazil' },
+    56→  { value: 'IN', label: 'India' },
+    57→  { value: 'MX', label: 'Mexico' },
+    58→];
+    59→
+    60→// --- Depth options ---
+    61→const DEPTH_OPTIONS: { value: InvestigationDepth; label: string; desc: string; icon: typeof Zap }[] = [
+    62→  { value: 'quick', label: 'QUICK', desc: '30s scan', icon: Zap },
+    63→  { value: 'standard', label: 'STANDARD', desc: '2 min deep', icon: Target },
+    64→  { value: 'deep', label: 'DEEP', desc: '5 min full', icon: Shield },
+    65→];
+    66→
+    67→// --- Confidence meter SVG ---
+    68→function ConfidenceMeter({ score }: { score: number }) {
+    69→  const radius = 40;
+    70→  const circumference = 2 * Math.PI * radius;
+    71→  const offset = circumference - (score / 100) * circumference;
+    72→  const color =
+    73→    score >= 80
+    74→      ? '#22c55e'
+    75→      : score >= 50
+    76→        ? '#f59e0b'
+    77→        : '#ef4444';
+    78→
+    79→  return (
+    80→    <div className="relative flex items-center justify-center w-28 h-28">
+    81→      <svg className="tp-confidence-ring w-28 h-28" viewBox="0 0 100 100">
+    82→        {/* Track */}
+    83→        <circle
+    84→          cx="50"
+    85→          cy="50"
+    86→          r={radius}
+    87→          fill="none"
+    88→          stroke="#2a3322"
+    89→          strokeWidth="6"
+    90→        />
+    91→        {/* Fill */}
+    92→        <circle
+    93→          cx="50"
+    94→          cy="50"
+    95→          r={radius}
+    96→          fill="none"
+    97→          stroke={color}
+    98→          strokeWidth="6"
+    99→          strokeLinecap="round"
+   100→          strokeDasharray={circumference}
+   101→          strokeDashoffset={offset}
+   102→          className="transition-all duration-1000 ease-out"
+   103→        />
+   104→      </svg>
+   105→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   106→        <span className="text-2xl font-bold" style={{ color }}>
+   107→          {score}
+   108→        </span>
+   109→        <span className="tp-hud text-[0.6rem]">confidence</span>
+   110→      </div>
+   111→    </div>
+   112→  );
+   113→}
+   114→
+   115→// --- Stat card ---
+   116→function StatCard({
+   117→  icon: Icon,
+   118→  label,
+   119→  value,
+   120→  color,
+   121→}: {
+   122→  icon: typeof Target;
+   123→  label: string;
+   124→  value: number | string;
+   125→  color: string;
+   126→}) {
+   127→  return (
+   128→    <div className="tp-bracket-card tp-panel rounded-sm p-4 flex items-center gap-3">
+   129→      <div
+   130→        className="flex items-center justify-center w-9 h-9 rounded-sm"
+   131→        style={{ background: `${color}15` }}
+   132→      >
+   133→        <Icon className="w-4 h-4" style={{ color }} />
+   134→      </div>
+   135→      <div>
+   136→        <p className="tp-hud text-[0.65rem]">{label}</p>
+   137→        <p className="tp-hud-value text-lg font-bold">{value}</p>
+   138→      </div>
+   139→    </div>
+   140→  );
+   141→}
+   142→
+   143→// ==============================================================
+   144→// MAIN COMPONENT
+   145→// ==============================================================
+   146→export default function InvestigationWorkspace() {
+   147→  const {
+   148→    currentInvestigation,
+   149→    progress,
+   150→    isRunning,
+   151→    aiAssessment,
+   152→    startInvestigation,
+   153→    startBatchInvestigation,
+   154→    clearCurrent,
+   155→  } = useInvestigationStore();
+   156→
+   157→  // Form state
+   158→  const [phone, setPhone] = useState('');
+   159→  const [email, setEmail] = useState('');
+   160→  const [name, setName] = useState('');
+   161→  const [business, setBusiness] = useState('');
+   162→  const [country, setCountry] = useState('US');
+   163→  const [state, setState] = useState('');
+   164→  const [city, setCity] = useState('');
+   165→  const [depth, setDepth] = useState<InvestigationDepth>('standard');
+   166→
+   167→  const fileInputRef = useRef<HTMLInputElement>(null);
+   168→
+   169→  const isCompleted =
+   170→    currentInvestigation?.status === 'completed' && !isRunning;
+   171→
+   172→  const handleSubmit = useCallback(async () => {
+   173→    const query: Record<string, string> = { depth };
+   174→    if (phone.trim()) query.phone = phone.trim();
+   175→    if (email.trim()) query.email = email.trim();
+   176→    if (name.trim()) query.name = name.trim();
+   177→    if (business.trim()) query.business = business.trim();
+   178→    if (country) query.country = country;
+   179→    if (state.trim()) query.state = state.trim();
+   180→    if (city.trim()) query.city = city.trim();
+   181→    await startInvestigation(query);
+   182→  }, [phone, email, name, business, country, state, city, depth, startInvestigation]);
+   183→
+   184→  const handleBatchUpload = useCallback(
+   185→    (e: React.ChangeEvent<HTMLInputElement>) => {
+   186→      const file = e.target.files?.[0];
+   187→      if (file) {
+   188→        startBatchInvestigation(file);
+   189→        if (fileInputRef.current) fileInputRef.current.value = '';
+   190→      }
+   191→    },
+   192→    [startBatchInvestigation],
+   193→  );
+   194→
+   195→  const handleClear = useCallback(() => {
+   196→    clearCurrent();
+   197→    setPhone('');
+   198→    setEmail('');
+   199→    setName('');
+   200→    setBusiness('');
+   201→    setCountry('US');
+   202→    setState('');
+   203→    setCity('');
+   204→    setDepth('standard');
+   205→  }, [clearCurrent]);
+   206→
+   207→  // Derive location display
+   208→  const locationLabel =
+   209→    currentInvestigation?.locationStatus === 'live'
+   210→      ? 'LIVE'
+   211→      : currentInvestigation?.locationStatus === 'last_known'
+   212→        ? 'LAST KNOWN'
+   213→        : currentInvestigation?.locationStatus === 'historical'
+   214→          ? 'HISTORICAL'
+   215→          : 'UNAVAILABLE';
+   216→
+   217→  const locationColor =
+   218→    currentInvestigation?.locationStatus === 'live'
+   219→      ? '#22c55e'
+   220→      : currentInvestigation?.locationStatus === 'last_known'
+   221→        ? '#f59e0b'
+   222→        : '#8a9a8a';
+   223→
+   224→  return (
+   225→    <div className="flex flex-col gap-6 p-4 md:p-6 max-w-4xl mx-auto w-full">
+   226→      {/* ========== FORM SECTION ========== */}
+   227→      {!isCompleted && (
+   228→        <>
+   229→          {/* Header */}
+   230→          <div className="flex items-center gap-3">
+   231→            <Search className="w-5 h-5 text-[#f59e0b]" />
+   232→            <div>
+   233→              <h2 className="text-sm font-semibold text-[#e8e8e0] tracking-wide uppercase">
+   234→                New Investigation
+   235→              </h2>
+   236→              <p className="tp-hud text-[0.65rem] mt-0.5">
+   237→                Enter identifiers to begin OSINT analysis
+   238→              </p>
+   239→            </div>
+   240→          </div>
+   241→
+   242→          <Separator className="bg-[#3a4a3a]" />
+   243→
+   244→          {/* Form panel */}
+   245→          <div className="tp-panel rounded-sm p-5">
+   246→            {/* Identifier inputs - 2 col on desktop */}
+   247→            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+   248→              {/* Phone */}
+   249→              <div className="space-y-1.5">
+   250→                <Label className="tp-hud flex items-center gap-1.5">
+   251→                  <Phone className="w-3 h-3" />
+   252→                  PHONE
+   253→                </Label>
+   254→                <Input
+   255→                  placeholder="(555) 123-4567"
+   256→                  value={phone}
+   257→                  onChange={(e) => setPhone(e.target.value)}
+   258→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] font-mono placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   259→                />
+   260→                {phone && (
+   261→                  <p className="tp-hud text-[0.6rem]">
+   262→                    E.164: <span className="tp-hud-value">{normalizePhone(phone)}</span>
+   263→                  </p>
+   264→                )}
+   265→              </div>
+   266→
+   267→              {/* Email */}
+   268→              <div className="space-y-1.5">
+   269→                <Label className="tp-hud flex items-center gap-1.5">
+   270→                  <Mail className="w-3 h-3" />
+   271→                  EMAIL
+   272→                </Label>
+   273→                <Input
+   274→                  type="email"
+   275→                  placeholder="user@example.com"
+   276→                  value={email}
+   277→                  onChange={(e) => setEmail(e.target.value)}
+   278→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] font-mono placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   279→                />
+   280→              </div>
+   281→
+   282→              {/* Name */}
+   283→              <div className="space-y-1.5">
+   284→                <Label className="tp-hud flex items-center gap-1.5">
+   285→                  <User className="w-3 h-3" />
+   286→                  NAME
+   287→                </Label>
+   288→                <Input
+   289→                  placeholder="John Doe"
+   290→                  value={name}
+   291→                  onChange={(e) => setName(e.target.value)}
+   292→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   293→                />
+   294→              </div>
+   295→
+   296→              {/* Business */}
+   297→              <div className="space-y-1.5">
+   298→                <Label className="tp-hud flex items-center gap-1.5">
+   299→                  <Building2 className="w-3 h-3" />
+   300→                  BUSINESS
+   301→                </Label>
+   302→                <Input
+   303→                  placeholder="Acme Corp"
+   304→                  value={business}
+   305→                  onChange={(e) => setBusiness(e.target.value)}
+   306→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   307→                />
+   308→              </div>
+   309→            </div>
+   310→
+   311→            {/* Region section */}
+   312→            <div className="mt-5">
+   313→              <p className="tp-hud flex items-center gap-1.5 mb-3">
+   314→                <MapPin className="w-3 h-3" />
+   315→                REGION
+   316→              </p>
+   317→              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   318→                <Select value={country} onValueChange={setCountry}>
+   319→                  <SelectTrigger className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] h-9 text-sm font-mono">
+   320→                    <SelectValue placeholder="Country" />
+   321→                  </SelectTrigger>
+   322→                  <SelectContent className="bg-[#1a201c] border-[#3a4a3a]">
+   323→                    {COUNTRIES.map((c) => (
+   324→                      <SelectItem
+   325→                        key={c.value}
+   326→                        value={c.value}
+   327→                        className="text-[#e8e8e0] focus:bg-[#2a3322] focus:text-[#f59e0b]"
+   328→                      >
+   329→                        {c.label}
+   330→                      </SelectItem>
+   331→                    ))}
+   332→                  </SelectContent>
+   333→                </Select>
+   334→
+   335→                <Input
+   336→                  placeholder="State / Province"
+   337→                  value={state}
+   338→                  onChange={(e) => setState(e.target.value)}
+   339→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   340→                />
+   341→
+   342→                <Input
+   343→                  placeholder="City"
+   344→                  value={city}
+   345→                  onChange={(e) => setCity(e.target.value)}
+   346→                  className="bg-[#121614] border-[#3a4a3a] text-[#e8e8e0] placeholder:text-[#5a6a5a] focus:border-[#f59e0b] focus:ring-[#f59e0b]/20 h-9 text-sm"
+   347→                />
+   348→              </div>
+   349→            </div>
+   350→
+   351→            {/* Depth selector */}
+   352→            <div className="mt-5">
+   353→              <p className="tp-hud mb-3">INVESTIGATION DEPTH</p>
+   354→              <div className="grid grid-cols-3 gap-3">
+   355→                {DEPTH_OPTIONS.map((opt) => {
+   356→                  const isActive = depth === opt.value;
+   357→                  const Icon = opt.icon;
+   358→                  return (
+   359→                    <button
+   360→                      key={opt.value}
+   361→                      type="button"
+   362→                      onClick={() => setDepth(opt.value)}
+   363→                      className={`relative flex flex-col items-center gap-1.5 p-3 rounded-sm border transition-all duration-200 cursor-pointer ${
+   364→                        isActive
+   365→                          ? 'bg-[#2a3322] border-[#f59e0b] text-[#f59e0b]'
+   366→                          : 'bg-[#121614] border-[#3a4a3a] text-[#8a9a8a] hover:border-[#5a6a5a] hover:text-[#e8e8e0]'
+   367→                      }`}
+   368→                    >
+   369→                      <Icon className="w-4 h-4" />
+   370→                      <span className="tp-hud text-[0.65rem]">{opt.label}</span>
+   371→                      <span className="text-[0.6rem] opacity-60">{opt.desc}</span>
+   372→                      {isActive && (
+   373→                        <div className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-[#f59e0b]" />
+   374→                      )}
+   375→                    </button>
+   376→                  );
+   377→                })}
+   378→              </div>
+   379→            </div>
+   380→
+   381→            {/* Actions */}
+   382→            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+   383→              <Button
+   384→                onClick={handleSubmit}
+   385→                disabled={isRunning}
+   386→                className="flex-1 sm:flex-none h-10 px-8 bg-[#f59e0b] text-[#121614] font-bold tracking-wider uppercase text-sm hover:bg-[#d97706] rounded-sm transition-colors cursor-pointer"
+   387→              >
+   388→                <Search className="w-4 h-4" />
+   389→                {isRunning ? 'RUNNING...' : 'START INVESTIGATION'}
+   390→              </Button>
+   391→
+   392→              <input
+   393→                ref={fileInputRef}
+   394→                type="file"
+   395→                accept=".csv"
+   396→                onChange={handleBatchUpload}
+   397→                className="hidden"
+   398→              />
+   399→              <Button
+   400→                variant="outline"
+   401→                onClick={() => fileInputRef.current?.click()}
+   402→                disabled={isRunning}
+   403→                className="h-10 px-6 border-[#3a4a3a] text-[#8a9a8a] hover:border-[#5a6a5a] hover:text-[#e8e8e0] hover:bg-[#2a3322] rounded-sm uppercase text-xs tracking-wider transition-colors cursor-pointer"
+   404→              >
+   405→                <Upload className="w-3.5 h-3.5" />
+   406→                Batch Upload
+   407→              </Button>
+   408→            </div>
+   409→          </div>
+   410→
+   411→          {/* ========== PROGRESS SECTION ========== */}
+   412→          {isRunning && progress && (
+   413→            <div className="tp-panel rounded-sm p-5">
+   414→              <div className="flex items-center justify-between mb-3">
+   415→                <div className="flex items-center gap-2">
+   416→                  <div className="w-2 h-2 rounded-full bg-[#f59e0b] tp-pulse" />
+   417→                  <span className="tp-hud text-xs">INVESTIGATION IN PROGRESS</span>
+   418→                </div>
+   419→                <span className="tp-hud-value text-xs font-mono">
+   420→                  {progress.progress}%
+   421→                </span>
+   422→              </div>
+   423→
+   424→              {/* Custom progress bar */}
+   425→              <div className="tp-progress-track mb-3">
+   426→                <div
+   427→                  className="tp-progress-fill"
+   428→                  style={{ width: `${progress.progress}%` }}
+   429→                />
+   430→              </div>
+   431→
+   432→              <div className="flex items-center gap-2">
+   433→                <ChevronRight className="w-3 h-3 text-[#f59e0b]" />
+   434→                <span className="text-sm text-[#e8e8e0]">{progress.message}</span>
+   435→              </div>
+   436→
+   437→              <p className="tp-hud text-[0.6rem] mt-2 opacity-60">
+   438→                Stage: <span className="uppercase">{progress.stage}</span>
+   439→              </p>
+   440→            </div>
+   441→          )}
+   442→        </>
+   443→      )}
+   444→
+   445→      {/* ========== RESULTS SECTION ========== */}
+   446→      {isCompleted && currentInvestigation && (
+   447→        <>
+   448→          {/* Demo watermark banner */}
+   449→          {currentInvestigation.isDemoData && (
+   450→            <div className="tp-demo-watermark tp-panel rounded-sm p-3 border-[#f59e0b]/30">
+   451→              <div className="flex items-center gap-2">
+   452→                <div className="w-2 h-2 rounded-full bg-[#f59e0b] tp-pulse" />
+   453→                <span className="tp-hud text-xs text-[#f59e0b]">
+   454→                  DEMO DATA — THIS INVESTIGATION USES SIMULATED RESULTS
+   455→                </span>
+   456→              </div>
+   457→            </div>
+   458→          )}
+   459→
+   460→          {/* Header */}
+   461→          <div className="flex items-center justify-between">
+   462→            <div className="flex items-center gap-3">
+   463→              <CheckCircle2 className="w-5 h-5 text-[#22c55e]" />
+   464→              <div>
+   465→                <h2 className="text-sm font-semibold text-[#e8e8e0] tracking-wide uppercase">
+   466→                  Investigation Complete
+   467→                </h2>
+   468→                <p className="tp-hud text-[0.65rem] mt-0.5">
+   469→                  ID: {currentInvestigation.id} · Depth:{' '}
+   470→                  <span className="tp-hud-value">
+   471→                    {currentInvestigation.depth.toUpperCase()}
+   472→                  </span>
+   473→                </p>
+   474→              </div>
+   475→            </div>
+   476→            <Button
+   477→              variant="ghost"
+   478→              onClick={handleClear}
+   479→              className="text-[#8a9a8a] hover:text-[#e8e8e0] hover:bg-[#2a3322] text-xs uppercase tracking-wider h-8 cursor-pointer"
+   480→            >
+   481→              New Investigation
+   482→            </Button>
+   483→          </div>
+   484→
+   485→          <Separator className="bg-[#3a4a3a]" />
+   486→
+   487→          {/* Summary stats row */}
+   488→          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   489→            <StatCard
+   490→              icon={User}
+   491→              label="Identities"
+   492→              value={currentInvestigation.identityCount}
+   493→              color="#f59e0b"
+   494→            />
+   495→            <StatCard
+   496→              icon={FileText}
+   497→              label="Evidence"
+   498→              value={currentInvestigation.evidenceCount}
+   499→              color="#22c55e"
+   500→            />
+   501→            <StatCard
+   502→              icon={Database}
+   503→              label="Sources"
+   504→              value={currentInvestigation.sourceCount}
+   505→              color="#3b82f6"
+   506→            />
+   507→            <StatCard
+   508→              icon={
+   509→                currentInvestigation.hasConflicts ? AlertTriangle : CheckCircle2
+   510→              }
+   511→              label="Conflicts"
+   512→              value={currentInvestigation.hasConflicts ? 'YES' : 'NONE'}
+   513→              color={currentInvestigation.hasConflicts ? '#ef4444' : '#22c55e'}
+   514→            />
+   515→          </div>
+   516→
+   517→          {/* Confidence + AI Assessment row */}
+   518→          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   519→            {/* Confidence panel */}
+   520→            <div className="tp-bracket-card tp-panel rounded-sm p-5">
+   521→              <p className="tp-hud text-xs mb-4">CONFIDENCE SCORE</p>
+   522→              <div className="flex items-center gap-5">
+   523→                <ConfidenceMeter
+   524→                  score={currentInvestigation.confidence ?? 0}
+   525→                />
+   526→                <div className="flex flex-col gap-2">
+   527→                  <div className="flex items-center gap-2">
+   528→                    <div
+   529→                      className="w-2 h-2 rounded-full"
+   530→                      style={{
+   531→                        backgroundColor:
+   532→                          (currentInvestigation.confidence ?? 0) >= 80
+   533→                            ? '#22c55e'
+   534→                            : (currentInvestigation.confidence ?? 0) >= 50
+   535→                              ? '#f59e0b'
+   536→                              : '#ef4444',
+   537→                      }}
+   538→                    />
+   539→                    <span
+   540→                      className="tp-hud-value text-xs font-bold uppercase"
+   541→                      style={{
+   542→                        color:
+   543→                          (currentInvestigation.confidence ?? 0) >= 80
+   544→                            ? '#22c55e'
+   545→                            : (currentInvestigation.confidence ?? 0) >= 50
+   546→                              ? '#f59e0b'
+   547→                              : '#ef4444',
+   548→                      }}
+   549→                    >
+   550→                      {(currentInvestigation.confidence ?? 0) >= 80
+   551→                        ? 'HIGH'
+   552→                        : (currentInvestigation.confidence ?? 0) >= 50
+   553→                          ? 'MODERATE'
+   554→                          : 'LOW'}
+   555→                    </span>
+   556→                  </div>
+   557→
+   558→                  {/* Location status */}
+   559→                  <div className="flex items-center gap-2 mt-1">
+   560→                    <MapPin
+   561→                      className="w-3 h-3"
+   562→                      style={{ color: locationColor }}
+   563→                    />
+   564→                    <span
+   565→                      className="tp-hud text-[0.65rem]"
+   566→                      style={{ color: locationColor }}
+   567→                    >
+   568→                      LOCATION: {locationLabel}
+   569→                    </span>
+   570→                  </div>
+   571→
+   572→                  {currentInvestigation.hasConflicts && (
+   573→                    <div className="flex items-center gap-1.5 mt-1">
+   574→                      <AlertTriangle className="w-3 h-3 text-[#ef4444]" />
+   575→                      <span className="text-[0.65rem] text-[#ef4444] font-mono">
+   576→                        CONFLICTING EVIDENCE DETECTED
+   577→                      </span>
+   578→                    </div>
+   579→                  )}
+   580→                </div>
+   581→              </div>
+   582→            </div>
+   583→
+   584→            {/* AI Assessment panel */}
+   585→            {aiAssessment && (
+   586→              <div className="tp-bracket-card tp-panel rounded-sm p-5">
+   587→                <p className="tp-hud text-xs mb-3">AI ASSESSMENT</p>
+   588→
+   589→                <p className="text-sm text-[#e8e8e0] leading-relaxed mb-3">
+   590→                  {aiAssessment.summary}
+   591→                </p>
+   592→
+   593→                <div
+   594→                  className={`text-xs font-mono p-2.5 rounded-sm mb-3 border ${
+   595→                    (currentInvestigation.confidence ?? 0) >= 80
+   596→                      ? 'bg-[#22c55e]/10 border-[#22c55e]/30 text-[#22c55e]'
+   597→                      : (currentInvestigation.confidence ?? 0) >= 50
+   598→                        ? 'bg-[#f59e0b]/10 border-[#f59e0b]/30 text-[#f59e0b]'
+   599→                        : 'bg-[#ef4444]/10 border-[#ef4444]/30 text-[#ef4444]'
+   600→                  }`}
+   601→                >
+   602→                  {aiAssessment.conclusion}
+   603→                </div>
+   604→
+   605→                {aiAssessment.recommendations.length > 0 && (
+   606→                  <div className="space-y-1">
+   607→                    <p className="tp-hud text-[0.6rem]">RECOMMENDATIONS</p>
+   608→                    {aiAssessment.recommendations.map((rec, i) => (
+   609→                      <div key={i} className="flex items-start gap-1.5">
+   610→                        <ChevronRight className="w-3 h-3 text-[#f59e0b] mt-0.5 shrink-0" />
+   611→                        <span className="text-xs text-[#8a9a8a]">{rec}</span>
+   612→                      </div>
+   613→                    ))}
+   614→                  </div>
+   615→                )}
+   616→
+   617→                {aiAssessment.missingEvidence.length > 0 && (
+   618→                  <div className="mt-3 space-y-1">
+   619→                    <p className="tp-hud text-[0.6rem]">MISSING EVIDENCE</p>
+   620→                    {aiAssessment.missingEvidence.map((me, i) => (
+   621→                      <div key={i} className="flex items-start gap-1.5">
+   622→                        <div className="w-1 h-1 rounded-full bg-[#8a9a8a] mt-1.5 shrink-0" />
+   623→                        <span className="text-xs text-[#5a6a5a]">{me}</span>
+   624→                      </div>
+   625→                    ))}
+   626→                  </div>
+   627→                )}
+   628→              </div>
+   629→            )}
+   630→          </div>
+   631→
+   632→          {/* Investigation metadata */}
+   633→          <div className="tp-panel rounded-sm p-4">
+   634→            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   635→              <div>
+   636→                <p className="tp-hud text-[0.6rem]">INPUT IDENTIFIERS</p>
+   637→                <div className="mt-1 flex flex-wrap gap-1">
+   638→                  {currentInvestigation.inputPhone && (
+   639→                    <Badge
+   640→                      variant="outline"
+   641→                      className="tp-source-tag border-[#3a4a3a] text-[0.65rem]"
+   642→                    >
+   643→                      <Phone className="w-2.5 h-2.5 mr-1" />
+   644→                      {currentInvestigation.inputPhone}
+   645→                    </Badge>
+   646→                  )}
+   647→                  {currentInvestigation.inputEmail && (
+   648→                    <Badge
+   649→                      variant="outline"
+   650→                      className="tp-source-tag border-[#3a4a3a] text-[0.65rem]"
+   651→                    >
+   652→                      <Mail className="w-2.5 h-2.5 mr-1" />
+   653→                      {currentInvestigation.inputEmail}
+   654→                    </Badge>
+   655→                  )}
+   656→                  {currentInvestigation.inputName && (
+   657→                    <Badge
+   658→                      variant="outline"
+   659→                      className="tp-source-tag border-[#3a4a3a] text-[0.65rem]"
+   660→                    >
+   661→                      <User className="w-2.5 h-2.5 mr-1" />
+   662→                      {currentInvestigation.inputName}
+   663→                    </Badge>
+   664→                  )}
+   665→                </div>
+   666→              </div>
+   667→              <div>
+   668→                <p className="tp-hud text-[0.6rem]">REGION</p>
+   669→                <p className="tp-hud-value text-xs mt-1">
+   670→                  {[currentInvestigation.inputCity, currentInvestigation.inputState, currentInvestigation.inputCountry]
+   671→                    .filter(Boolean)
+   672→                    .join(', ') || '—'}
+   673→                </p>
+   674→              </div>
+   675→              <div>
+   676→                <p className="tp-hud text-[0.6rem]">DURATION</p>
+   677→                <p className="tp-hud-value text-xs mt-1 flex items-center gap-1">
+   678→                  <Clock className="w-3 h-3" />
+   679→                  {currentInvestigation.startedAt && currentInvestigation.completedAt
+   680→                    ? `${Math.round((new Date(currentInvestigation.completedAt).getTime() - new Date(currentInvestigation.startedAt).getTime()) / 1000)}s`
+   681→                    : '—'}
+   682→                </p>
+   683→              </div>
+   684→              <div>
+   685→                <p className="tp-hud text-[0.6rem]">DEPTH</p>
+   686→                <p className="tp-hud-value text-xs mt-1 uppercase">
+   687→                  {currentInvestigation.depth}
+   688→                </p>
+   689→              </div>
+   690→            </div>
+   691→          </div>
+   692→
+   693→          {/* View full report button */}
+   694→          <Button
+   695→            onClick={() => {
+   696→              // Navigate would be handled by the nav store in real integration
+   697→              // For now, the component signals navigation intent
+   698→              window.dispatchEvent(
+   699→                new CustomEvent('tp-navigate', {
+   700→                  detail: { view: 'investigation-detail', id: currentInvestigation.id },
+   701→                }),
+   702→              );
+   703→            }}
+   704→            className="w-full h-11 bg-[#f59e0b] text-[#121614] font-bold tracking-wider uppercase text-sm hover:bg-[#d97706] rounded-sm transition-colors cursor-pointer"
+   705→          >
+   706→            <Eye className="w-4 h-4" />
+   707→            View Full Report
+   708→            <ChevronRight className="w-4 h-4 ml-auto" />
+   709→          </Button>
+   710→        </>
+   711→      )}
+   712→    </div>
+   713→  );
+   714→}
+   715→
