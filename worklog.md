@@ -27,3 +27,31 @@ Stage Summary:
 - Lint passes cleanly
 - Dev server compiles and runs successfully
 - User needs to add API keys to .env.local for features to activate
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix 5 critical production failures reported by user
+
+Work Log:
+- Audited pipeline.ts (1049 lines) - found pipeline had only 9 stages, missing business/public/location stages
+- Audited Dashboard.tsx - found MapFallback using one-time getState() (not reactive), container height issues on mobile
+- Audited MapLibreMap.tsx - found initialization race condition on mobile (no delay before map init)
+- Audited /api/setup/route.ts - found it correctly checks Supabase, issue is env vars must be in Netlify
+- Created 3 new pipeline stages: Business Association, Public Presence, Location Enrichment
+- Added detailed timing/status logging to NumVerify and Serper proxy functions
+- Fixed MapFallback to use reactive Zustand subscription
+- Fixed MapLibreMap with 250ms init delay, proper cleanup refs, absolute positioning
+- Fixed Dashboard globe container with explicit height calc
+- Created /api/health endpoint for real provider connectivity testing
+- Updated admin store to call health check on dashboard mount
+- Removed stale 'offline demo mode' text
+- Build passes clean, pushed to GitHub
+
+Stage Summary:
+- Pipeline expanded from 9 to 12 stages with business, public, location enrichment
+- Mobile 2D map now renders with proper container sizing and delayed init
+- Provider health is now checked on dashboard mount (shows real status: healthy/degraded/unconfigured)
+- All changes committed and pushed: 60375bb
+
+**CRITICAL REMINDER**: User MUST set all env vars in Netlify Environment Variables panel
+for the APIs to work in production. The .env.local values only work locally.
