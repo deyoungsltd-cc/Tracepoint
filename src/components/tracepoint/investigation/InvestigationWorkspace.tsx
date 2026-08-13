@@ -9,10 +9,15 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { saveInvestigation } from '@/lib/supabase/data';
 
 interface ApiConfigStatus {
-  configured: Record<string, boolean>;
-  missingCritical: string[];
+  allConfigured: boolean;
+  configuredCount: number;
+  totalRequired: number;
+  checks: Record<string, boolean>;
+  missing: string[];
+  hasInvestigationCapability: boolean;
   ready: boolean;
   message: string;
+  missingCritical: string[];
 }
 
 function normalizePhone(phone: string): string {
@@ -90,9 +95,20 @@ export default function InvestigationWorkspace() {
 
   // Check API configuration on mount
   useEffect(() => {
-    fetch('/api/config')
+    fetch('/api/config-check')
       .then(r => r.json())
-      .then(setApiConfig)
+      .then((data: any) => {
+        const missingCritical = data.missing || [];
+        setApiConfig({
+          ...data,
+          configured: data.checks || {},
+          ready: data.hasInvestigationCapability || false,
+          missingCritical,
+          message: data.allConfigured
+            ? 'All providers configured'
+            : `${missingCritical.length} provider(s) need configuration`,
+        });
+      })
       .catch(() => {});
   }, []);
 
@@ -129,7 +145,7 @@ export default function InvestigationWorkspace() {
           <p className="text-xs text-muted-foreground mt-0.5">Enter a phone number and/or email. Country is auto-detected.</p>
         </div>
 
-        {/* API Configuration Warning — shown BEFORE starting */}
+        {/* API Configuration Warning — shown BEFORE starting, only if NO investigation capability */}
         {apiConfig && !apiConfig.ready && !isRunning && !isCompleted && (
           <div className="mb-4 p-4 rounded border border-[#c8a24e]/25 bg-[#c8a24e]/5">
             <div className="flex items-start gap-3">
@@ -137,9 +153,9 @@ export default function InvestigationWorkspace() {
                 <Key className="w-3.5 h-3.5 text-[#c8a24e]" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#c8a24e]">API Keys Required</p>
+                <p className="text-sm font-medium text-[#c8a24e]">API Keys Required for Investigation</p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Investigations require API keys to fetch real data. The following providers are not configured:
+                  Real investigations need at least one API provider configured. Currently missing:
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {apiConfig.missingCritical.map((key) => (
@@ -171,10 +187,13 @@ export default function InvestigationWorkspace() {
                 <div className="mt-3 p-2 rounded bg-background/60 border border-border">
                   <p className="text-[10px] text-muted-foreground leading-relaxed">
                     <strong className="text-foreground">To fix:</strong>{' '}
-                    Go to <button onClick={() => navigate('settings')} className="text-[#c8a24e] underline hover:text-foreground">Settings</button>{' '}
-                    or set environment variables in{' '}
+                    Set environment variables in{' '}
                     <code className="text-[9px] bg-accent px-1 rounded">.env.local</code> (local) or{' '}
                     <code className="text-[9px] bg-accent px-1 rounded">Netlify → Site Settings → Environment</code> (production).
+                    Keys needed: <code className="text-[9px] bg-accent px-1 rounded">NUMVERIFY_API_KEY</code>,{' '}
+                    <code className="text-[9px] bg-accent px-1 rounded">SERPER_API_KEY</code>,{' '}
+                    <code className="text-[9px] bg-accent px-1 rounded">ABSTRACT_API_KEY</code>,{' '}
+                    <code className="text-[9px] bg-accent px-1 rounded">OPENAI_API_KEY</code>.
                   </p>
                 </div>
               </div>

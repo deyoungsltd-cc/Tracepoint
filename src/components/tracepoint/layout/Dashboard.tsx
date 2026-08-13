@@ -19,8 +19,16 @@ function isMobileDevice(): boolean {
 function supportsWebGL(): boolean {
   try {
     const canvas = document.createElement('canvas');
-    return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
-  } catch { return false; }
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) return false;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+    console.log('[WebGL] Supported - renderer:', renderer || 'unknown');
+    return true;
+  } catch (e) {
+    console.warn('[WebGL] Not supported:', e);
+    return false;
+  }
 }
 
 class GlobeErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean; error?: string }> {
@@ -37,7 +45,12 @@ class GlobeErrorBoundary extends React.Component<React.PropsWithChildren, { hasE
 
 function MapFallback() {
   const markers = useGlobeStore((s) => s.markers);
-  return <MapLibreMap markers={markers} />;
+  console.log('[MapFallback] Rendering 2D map fallback with', markers.length, 'markers');
+  return (
+    <div style={{ position: 'absolute', inset: 0, minHeight: '250px' }}>
+      <MapLibreMap markers={markers} />
+    </div>
+  );
 }
 
 interface DbSetupStatus {
@@ -72,7 +85,6 @@ function StatBlock({ label, value, sub, accent }: {
   );
 }
 
-// Map content rendered inside the map container (shared between mobile and desktop)
 function MapContent({ viewMode, useFallbackMap, markers }: { viewMode: string; useFallbackMap: boolean; markers: any[] }) {
   return (
     <>
@@ -125,7 +137,7 @@ function MapContent({ viewMode, useFallbackMap, markers }: { viewMode: string; u
         <div className="w-full h-full flex items-center justify-center data-grid-bg">
           <div className="text-center">
             <BarChart3 className="w-8 h-8 text-muted-foreground/8 mx-auto mb-2" />
-            <p className="text-[10px] text-muted-foreground">Evidence matrix — run an investigation to populate</p>
+            <p className="text-[10px] text-muted-foreground">Evidence matrix - run an investigation to populate</p>
           </div>
         </div>
       )}
@@ -148,7 +160,6 @@ function DashboardContent() {
   const [isMobile, setIsMobile] = useState(false);
   const [showMobilePanel, setShowMobilePanel] = useState<'left' | 'right' | null>(null);
 
-  // Detect mobile once on mount
   useEffect(() => {
     const mobile = isMobileDevice() || !supportsWebGL();
     setIsMobile(isMobile);
@@ -157,12 +168,10 @@ function DashboardContent() {
     }
   }, []);
 
-  // Load persisted investigations on mount
   useEffect(() => {
     loadPersistedInvestigations();
   }, [loadPersistedInvestigations]);
 
-  // Check DB setup + provider health
   useEffect(() => {
     if (isSupabaseConfigured()) {
       fetch('/api/setup').then(r => r.json()).then(setDbStatus).catch(() => {});
@@ -190,65 +199,30 @@ function DashboardContent() {
   const dbNeedsSetup = isSupabaseConfigured() && dbStatus?.tablesExist === false;
   const healthyProviders = providers.filter(p => p.health === 'healthy' && p.isEnabled).length;
 
-  // ========== LEFT PANEL CONTENT (shared between desktop and mobile sheet) ==========
   const leftPanelContent = (
     <>
-      {/* Stats grid */}
       <div className="grid grid-cols-2 gap-2">
-        <StatBlock
-          label="Investigations"
-          value={completed.length}
-          sub={`${investigations.filter(i => i.status === 'running').length} active`}
-        />
-        <StatBlock
-          label="Confidence"
-          value={avgConf ? `${avgConf}%` : '—'}
-          accent={avgConf && avgConf >= 80 ? 'green' : avgConf ? 'gold' : 'muted'}
-          sub="avg score"
-        />
-        <StatBlock
-          label="Providers"
-          value={`${healthyProviders}/${providers.length}`}
-          accent={healthyProviders === providers.length ? 'green' : 'gold'}
-          sub="operational"
-        />
-        <StatBlock
-          label="Evidence"
-          value={completed.reduce((s, i) => s + i.evidenceCount, 0)}
-          sub="total items"
-        />
+        <StatBlock label="Investigations" value={completed.length} sub={`${investigations.filter(i => i.status === 'running').length} active`} />
+        <StatBlock label="Confidence" value={avgConf ? `${avgConf}%` : '-'} accent={avgConf && avgConf >= 80 ? 'green' : avgConf ? 'gold' : 'muted'} sub="avg score" />
+        <StatBlock label="Providers" value={`${healthyProviders}/${providers.length}`} accent={healthyProviders === providers.length ? 'green' : 'gold'} sub="operational" />
+        <StatBlock label="Evidence" value={completed.reduce((s, i) => s + i.evidenceCount, 0)} sub="total items" />
       </div>
-
-      {/* Avg confidence bar */}
       {avgConf !== null && (
         <div className="surface p-2">
           <ConfidenceMeter score={avgConf} size="md" animated />
         </div>
       )}
-
-      {/* Actions */}
       <div className="surface p-2 flex flex-col gap-1">
-        <button
-          onClick={() => navigate('investigation')}
-          className="flex items-center gap-2 px-2.5 py-2 rounded text-[11px] font-medium border border-[#c8a24e]/20 bg-[#c8a24e]/6 text-[#c8a24e] hover:bg-[#c8a24e]/12 transition-all duration-150 text-left"
-        >
+        <button onClick={() => navigate('investigation')} className="flex items-center gap-2 px-2.5 py-2 rounded text-[11px] font-medium border border-[#c8a24e]/20 bg-[#c8a24e]/6 text-[#c8a24e] hover:bg-[#c8a24e]/12 transition-all duration-150 text-left">
           <Crosshair className="w-3 h-3 shrink-0" /> New Investigation
         </button>
-        <button
-          onClick={() => navigate('batch-lookup')}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left"
-        >
+        <button onClick={() => navigate('batch-lookup')} className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left">
           <Layers className="w-3 h-3 shrink-0" /> Batch Lookup
         </button>
-        <button
-          onClick={() => navigate('history')}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left"
-        >
+        <button onClick={() => navigate('history')} className="flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors text-left">
           <Clock className="w-3 h-3 shrink-0" /> View History
         </button>
       </div>
-
-      {/* Provider Status */}
       <div className="surface p-2">
         <div className="mono-label mb-2">Data Providers</div>
         {providers.slice(0, 7).map((p) => (
@@ -263,8 +237,6 @@ function DashboardContent() {
           </div>
         ))}
       </div>
-
-      {/* DB Status */}
       <div className="surface p-2">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -275,15 +247,13 @@ function DashboardContent() {
           ) : dbConnected ? (
             <span className="intel-badge text-[#4a9e5a] bg-[#4a9e5a]/8 border border-[#4a9e5a]/15">CONNECTED</span>
           ) : (
-            <span className="intel-badge">LOCAL STORAGE</span>
+            <span className="intel-badge" style={{ color: '#c8a24e' }}>NOT CONFIGURED</span>
           )}
         </div>
         {dbNeedsSetup && (
           <div className="mt-1.5 p-1.5 rounded bg-[#c8a24e]/4 border border-[#c8a24e]/10">
             <p className="text-[9px] text-[#c8a24e]/80 mb-1">
-              {dbStatus?.fix === 'rls_policy'
-                ? 'RLS policy error — click below to auto-fix'
-                : 'Run schema in Supabase SQL Editor'}
+              {dbStatus?.fix === 'rls_policy' ? 'RLS policy error - click below to auto-fix' : 'Run schema in Supabase SQL Editor'}
             </p>
             {dbStatus?.fix === 'rls_policy' ? (
               <button
@@ -291,18 +261,14 @@ function DashboardContent() {
                   if (d.success) setDbStatus({ configured: true, tablesExist: true });
                 })}
                 className="text-[9px] text-[#c8a24e] underline hover:text-foreground transition-colors"
-              >
-                Auto-fix RLS Policies →
-              </button>
+              >Auto-fix RLS Policies</button>
             ) : (
               <a
                 href={`https://supabase.com/dashboard/project/${dbStatus?.projectRef}/sql`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[9px] text-[#c8a24e] underline hover:text-foreground transition-colors"
-              >
-                Open SQL Editor →
-              </a>
+              >Open SQL Editor</a>
             )}
           </div>
         )}
@@ -310,14 +276,13 @@ function DashboardContent() {
     </>
   );
 
-  // ========== RIGHT PANEL CONTENT ==========
   const rightPanelContent = (
     <>
       <div className="surface p-2">
         <div className="flex justify-between items-center mb-2">
           <div className="mono-label">Recent Investigations</div>
           <button onClick={() => navigate('history')} className="text-[9px] text-[#c8a24e] hover:text-foreground transition-colors bg-transparent border-none cursor-pointer font-medium">
-            VIEW ALL →
+            VIEW ALL
           </button>
         </div>
         {recent.length === 0 ? (
@@ -328,31 +293,27 @@ function DashboardContent() {
           </div>
         ) : (
           <div className="flex flex-col gap-1">
-            {recent.map((inv) => {
-              return (
-                <button
-                  key={inv.id}
-                  onClick={() => { invStore.selectInvestigation(inv.id); navigate('investigation-detail', inv.id); }}
-                  style={{ width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: '#1a1e1b', cursor: 'pointer' }}
-                >
-                  <div className="flex justify-between mb-0.5">
-                    <span className="text-[10px] text-foreground max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
-                      {inv.inputName || inv.inputPhone || inv.inputEmail || 'Unknown'}
-                    </span>
-                  </div>
-                  <ConfidenceMeter score={inv.confidence || 0} size="sm" showLabel={false} />
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="source-badge">{inv.depth}</span>
-                    <span className="text-[9px] text-muted-foreground">{inv.identityCount} id · {inv.evidenceCount} ev</span>
-                  </div>
-                </button>
-              );
-            })}
+            {recent.map((inv) => (
+              <button
+                key={inv.id}
+                onClick={() => { invStore.selectInvestigation(inv.id); navigate('investigation-detail', inv.id); }}
+                style={{ width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: '#1a1e1b', cursor: 'pointer' }}
+              >
+                <div className="flex justify-between mb-0.5">
+                  <span className="text-[10px] text-foreground max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">
+                    {inv.inputName || inv.inputPhone || inv.inputEmail || 'Unknown'}
+                  </span>
+                </div>
+                <ConfidenceMeter score={inv.confidence || 0} size="sm" showLabel={false} />
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="source-badge">{inv.depth}</span>
+                  <span className="text-[9px] text-muted-foreground">{inv.identityCount} id / {inv.evidenceCount} ev</span>
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </div>
-
-      {/* Quick Stats Footer */}
       <div className="surface p-2">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -364,18 +325,14 @@ function DashboardContent() {
     </>
   );
 
-  // ========== MOBILE LAYOUT ==========
   if (isMobile) {
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Map / Globe — takes all available space */}
-        <div style={{ flex: '1 1 0%', minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: '1 1 0%', minHeight: '280px', position: 'relative' }}>
           <div className="globe-bg" style={{ position: 'absolute', inset: 0, borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
             <MapContent viewMode={viewMode} useFallbackMap={useFallbackMap} markers={markers} />
           </div>
         </div>
-
-        {/* Mobile bottom action bar */}
         <div style={{ flexShrink: 0, display: 'flex', gap: '6px', padding: '8px', borderTop: '1px solid var(--border)', background: 'var(--background)' }}>
           <button
             onClick={() => navigate('investigation')}
@@ -396,8 +353,6 @@ function DashboardContent() {
             <Clock className="w-3 h-3" /> History
           </button>
         </div>
-
-        {/* Mobile slide-up panel */}
         {showMobilePanel && (
           <div style={{ flexShrink: 0, maxHeight: '50vh', overflowY: 'auto', padding: '10px', borderTop: '1px solid var(--border)', background: 'var(--background)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -413,22 +368,16 @@ function DashboardContent() {
     );
   }
 
-  // ========== DESKTOP LAYOUT: Traditional 3-column ==========
   return (
     <div className="flex flex-col lg:flex-row gap-2.5 p-2.5 h-full">
-      {/* Left Panel */}
       <div className="flex flex-col gap-2.5 shrink-0 w-full lg:w-56 xl:w-60">
         {leftPanelContent}
       </div>
-
-      {/* Center: Map / Globe */}
       <div className="flex-1 min-h-[300px] lg:min-h-0 relative">
         <div className="globe-bg absolute inset-0 rounded-[var(--radius)] border border-border overflow-hidden">
           <MapContent viewMode={viewMode} useFallbackMap={useFallbackMap} markers={markers} />
         </div>
       </div>
-
-      {/* Right Panel */}
       <div className="flex flex-col gap-2.5 shrink-0 w-full lg:w-56 xl:w-60">
         {rightPanelContent}
       </div>

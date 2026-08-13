@@ -214,7 +214,8 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         .maplibregl-ctrl-group { background: #151917 !important; border: 1px solid #232823 !important; border-radius: 3px !important; }
         .maplibregl-ctrl-group button { border-color: #232823 !important; }
         .maplibregl-ctrl-group button span { background: #cdd1c8 !important; }
-        .maplibregl-map { width: 100% !important; height: 100% !important; }
+        .maplibregl-map { width: 100% !important; height: 100% !important; min-height: 250px !important; }
+        .tp-globe-container, .tp-globe-container > div { width: 100% !important; height: 100% !important; min-height: 250px !important; }
       `}</style>
       <div
         ref={mapContainer}
@@ -225,7 +226,7 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
           left: 0,
           width: '100%',
           height: '100%',
-          minHeight: '200px',
+          minHeight: '250px',
         }}
       />
     </>

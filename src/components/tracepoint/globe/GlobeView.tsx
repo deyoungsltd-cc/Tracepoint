@@ -482,7 +482,17 @@ export const GlobeScene = GlobeSceneInner;
 /** Wrapper component that provides the globe with a Suspense loading fallback. */
 export function GlobeView() {
   return (
-    <div className="tp-globe-container relative w-full h-full">
+    <div
+      className="tp-globe-container"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        minHeight: '280px',
+      }}
+    >
       <Suspense fallback={<GlobeLoadingFallback />}>
         <GlobeScene />
       </Suspense>
