@@ -214,21 +214,29 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         .maplibregl-ctrl-group { background: #151917 !important; border: 1px solid #232823 !important; border-radius: 3px !important; }
         .maplibregl-ctrl-group button { border-color: #232823 !important; }
         .maplibregl-ctrl-group button span { background: #cdd1c8 !important; }
-        .maplibregl-map { width: 100% !important; height: 100% !important; min-height: 250px !important; }
-        .tp-globe-container, .tp-globe-container > div { width: 100% !important; height: 100% !important; min-height: 250px !important; }
+        .tp-maplibre-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          min-height: 280px;
+          overflow: hidden;
+        }
+        .tp-maplibre-container .maplibregl-map {
+          position: absolute !important;
+          inset: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
+          min-height: 280px !important;
+        }
+        .tp-maplibre-container .maplibregl-map canvas {
+          filter: brightness(0.7) contrast(1.1) saturate(0.8) hue-rotate(180deg) invert(1);
+        }
       `}</style>
-      <div
-        ref={mapContainer}
-        className={className || ''}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          minHeight: '250px',
-        }}
-      />
+      <div className={className || ''} style={{ position: 'absolute', inset: 0, minHeight: '280px' }}>
+        <div className="tp-maplibre-container">
+          <div ref={mapContainer} style={{ width: '100%', height: '100%', minHeight: '280px' }} />
+        </div>
+      </div>
     </>
   );
 }

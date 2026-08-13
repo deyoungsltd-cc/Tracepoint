@@ -1,8 +1,10 @@
 // ============================================================
 // TRACEPOINT — Server-side Serper.dev Web Search Proxy
+// Returns mock data when API key is not configured (Demo Mode).
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { generateMockSerperResults } from '@/lib/api/mock-data';
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +12,15 @@ export async function POST(request: NextRequest) {
     if (!query) return NextResponse.json({ error: 'query required' }, { status: 400 });
 
     const apiKey = process.env.SERPER_API_KEY || process.env.NEXT_PUBLIC_SERPER_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'Serper API key not configured' }, { status: 500 });
+
+    // --- DEMO MODE: Return mock data when key not configured ---
+    if (!apiKey || !apiKey.trim()) {
+      console.log('[Serper] DEMO MODE — returning mock data');
+      const mockData = generateMockSerperResults(query);
+      return NextResponse.json(mockData, {
+        headers: { 'X-Mock': 'true' },
+      });
+    }
 
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',

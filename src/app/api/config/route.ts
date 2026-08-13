@@ -1,7 +1,6 @@
 // ============================================================
 // TRACEPOINT — API Configuration Status
 // Returns which API keys are configured (booleans only, no secrets).
-// Called by the UI to show setup warnings before investigations.
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -19,13 +18,15 @@ export async function GET() {
 
   const criticalKeys = ['numverify', 'serper', 'openai'] as const;
   const missingCritical = criticalKeys.filter(k => !config[k]);
+  const isDemoMode = missingCritical.length > 0;
 
   return NextResponse.json({
     configured: config,
     missingCritical,
-    ready: missingCritical.length === 0,
-    message: missingCritical.length > 0
-      ? `Missing API keys: ${missingCritical.join(', ')}. Set them in Netlify Environment Variables or .env.local.`
+    ready: true, // Always ready — demo mode handles missing keys
+    isDemoMode,
+    message: isDemoMode
+      ? `Demo mode: ${missingCritical.join(', ')} key(s) not set. Using simulated data. Set keys in .env.local for real investigations.`
       : 'All critical API keys are configured.',
   });
 }

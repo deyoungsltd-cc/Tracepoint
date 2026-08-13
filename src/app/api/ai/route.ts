@@ -1,10 +1,10 @@
 // ============================================================
 // TRACEPOINT — Server-side OpenAI Proxy API Route
-// Proxies chat completion requests to OpenAI using server-side
-// environment variables (the key is not exposed to the client).
+// Returns mock assessment when API key is not configured (Demo Mode).
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { generateMockAIAssessment } from '@/lib/api/mock-data';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -27,16 +27,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use the env var. Even though it has NEXT_PUBLIC_ prefix, on the server
-    // side it is accessible via process.env and the request originates from
-    // the server (not the browser), so OpenAI won't block it.
     const apiKey = process.env.OPENAI_API_KEY;
 
-    if (!apiKey) {
-      console.error('[/api/ai] OpenAI API key is not configured');
+    // --- DEMO MODE: Return mock AI assessment when key not configured ---
+    if (!apiKey || !apiKey.trim()) {
+      console.log('[/api/ai] DEMO MODE — returning mock AI assessment');
+
+      // Extract basic info from the user message for mock generation
+      const userMessage = body.messages.find(m => m.role === 'user')?.content || '';
+      const phoneMatch = userMessage.match(/Phone:\s*(\S+)/i);
+      const emailMatch = userMessage.match(/Email:\s*(\S+)/i);
+      const countryMatch = userMessage.match(/Country:\s*(\S+)/i);
+
+      const mockContent = generateMockAIAssessment({
+        phone: phoneMatch?.[1] || '',
+        email: emailMatch?.[1] || '',
+        candidates: [],
+        evidence: [],
+        country: countryMatch?.[1] || '',
+      });
+
       return NextResponse.json(
-        { error: 'OpenAI API key is not configured on the server' },
-        { status: 500 }
+        { content: mockContent },
+        { headers: { 'X-Mock': 'true' } }
       );
     }
 
@@ -58,9 +71,7 @@ export async function POST(request: NextRequest) {
 
     if (!openaiResponse.ok) {
       const errorText = await openaiResponse.text();
-      console.error(
-        `[/api/ai] OpenAI returned ${openaiResponse.status}: ${errorText}`
-      );
+      console.error(`[/api/ai] OpenAI returned ${openaiResponse.status}: ${errorText}`);
       return NextResponse.json(
         { error: `OpenAI API error: ${openaiResponse.status}` },
         { status: 502 }

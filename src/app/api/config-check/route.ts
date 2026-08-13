@@ -1,7 +1,6 @@
 // ============================================================
 // TRACEPOINT — Configuration Check API
-// Returns which API keys are configured (key presence only, no calls).
-// Used by the UI to show clear "setup needed" messages.
+// Returns which API keys are configured, and whether demo mode is active.
 // ============================================================
 
 import { NextResponse } from 'next/server';
@@ -18,6 +17,9 @@ export async function GET() {
   const total = Object.values(checks).filter(Boolean).length;
   const allSet = total === Object.keys(checks).length;
   const hasAny = total > 0;
+  const criticalKeys = ['numverify', 'serper', 'openai'];
+  const missingCritical = criticalKeys.filter(k => !checks[k]);
+  const isDemoMode = missingCritical.length > 0;
 
   return NextResponse.json({
     allConfigured: allSet,
@@ -29,5 +31,10 @@ export async function GET() {
       .map(([k]) => k),
     hasAnyApiKeys: hasAny,
     hasInvestigationCapability: checks.numverify || checks.serper || checks.abstractApi,
+    isDemoMode,
+    missingCritical,
+    demoMessage: isDemoMode
+      ? `Demo mode active — ${missingCritical.length} provider(s) using simulated data. Investigations will run with mock results. Set API keys in .env.local for real data.`
+      : null,
   });
 }

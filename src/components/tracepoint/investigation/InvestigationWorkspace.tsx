@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useInvestigationStore, useNavStore, useSettingsStore } from '@/lib/store/app';
-import { Crosshair, Upload, Zap, Target, Shield, Globe, ChevronDown, AlertTriangle, Settings, Key } from 'lucide-react';
+import { Crosshair, Upload, Zap, Target, Shield, Globe, ChevronDown } from 'lucide-react';
 import type { InvestigationDepth } from '@/lib/types';
 import { ConfidenceMeter } from '@/components/tracepoint/shared/ConfidenceMeter';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
@@ -18,6 +18,8 @@ interface ApiConfigStatus {
   ready: boolean;
   message: string;
   missingCritical: string[];
+  isDemoMode: boolean;
+  demoMessage: string | null;
 }
 
 function normalizePhone(phone: string): string {
@@ -99,14 +101,19 @@ export default function InvestigationWorkspace() {
       .then(r => r.json())
       .then((data: any) => {
         const missingCritical = data.missing || [];
+        const isDemoMode = data.isDemoMode || false;
         setApiConfig({
           ...data,
           configured: data.checks || {},
-          ready: data.hasInvestigationCapability || false,
+          ready: true, // Always ready — demo mode handles missing keys
           missingCritical,
-          message: data.allConfigured
-            ? 'All providers configured'
-            : `${missingCritical.length} provider(s) need configuration`,
+          isDemoMode,
+          demoMessage: data.demoMessage || null,
+          message: isDemoMode
+            ? (data.demoMessage || 'Demo mode active')
+            : data.allConfigured
+              ? 'All providers configured'
+              : `${missingCritical.length} provider(s) need configuration`,
         });
       })
       .catch(() => {});
@@ -145,23 +152,22 @@ export default function InvestigationWorkspace() {
           <p className="text-xs text-muted-foreground mt-0.5">Enter a phone number and/or email. Country is auto-detected.</p>
         </div>
 
-        {/* API Configuration Warning — shown BEFORE starting, only if NO investigation capability */}
-        {apiConfig && !apiConfig.ready && !isRunning && !isCompleted && (
+        {/* Demo Mode Banner — shown when API keys are missing, investigations use simulated data */}
+        {apiConfig && apiConfig.isDemoMode && !isRunning && !isCompleted && (
           <div className="mb-4 p-4 rounded border border-[#c8a24e]/25 bg-[#c8a24e]/5">
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-full bg-[#c8a24e]/10 border border-[#c8a24e]/20 flex items-center justify-center shrink-0">
-                <Key className="w-3.5 h-3.5 text-[#c8a24e]" />
+                <Zap className="w-3.5 h-3.5 text-[#c8a24e]" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#c8a24e]">API Keys Required for Investigation</p>
+                <p className="text-sm font-medium text-[#c8a24e]">Demo Mode Active</p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Real investigations need at least one API provider configured. Currently missing:
+                  No API keys are configured. Investigations will run using <strong className="text-foreground">simulated data</strong> to demonstrate the full pipeline. Results are illustrative only and not real intelligence.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {apiConfig.missingCritical.map((key) => (
-                    <span key={key} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[#b83a3a]/8 border border-[#b83a3a]/15 text-[#b83a3a]">
-                      <AlertTriangle className="w-2.5 h-2.5" />
-                      {keyLabels[key] || key}
+                    <span key={key} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-accent border border-border text-muted-foreground">
+                      {keyLabels[key] || key}: SIMULATED
                     </span>
                   ))}
                 </div>
@@ -170,32 +176,22 @@ export default function InvestigationWorkspace() {
                   className="mt-2 text-[10px] text-[#c8a24e]/70 hover:text-[#c8a24e] transition-colors flex items-center gap-1"
                 >
                   <ChevronDown className={`w-2.5 h-2.5 transition-transform ${showConfigDetails ? 'rotate-180' : ''}`} />
-                  {showConfigDetails ? 'Hide' : 'Show'} all provider status
+                  {showConfigDetails ? 'Hide' : 'Show'} setup instructions
                 </button>
                 {showConfigDetails && (
-                  <div className="mt-2 space-y-1">
-                    {Object.entries(apiConfig.configured).map(([key, configured]) => (
-                      <div key={key} className="flex items-center justify-between text-[10px]">
-                        <span className="text-muted-foreground">{keyLabels[key] || key}</span>
-                        <span className={configured ? 'text-[#4a9e5a]' : 'text-[#b83a3a]'}>
-                          {configured ? 'CONFIGURED' : 'MISSING'}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="mt-2 p-2 rounded bg-background/60 border border-border">
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      <strong className="text-foreground">For real investigations:</strong>{' '}
+                      Add API keys to{' '}
+                      <code className="text-[9px] bg-accent px-1 rounded">.env.local</code>{' '}
+                      and restart the server. Keys needed:{' '}
+                      <code className="text-[9px] bg-accent px-1 rounded">NUMVERIFY_API_KEY</code>,{' '}
+                      <code className="text-[9px] bg-accent px-1 rounded">SERPER_API_KEY</code>,{' '}
+                      <code className="text-[9px] bg-accent px-1 rounded">ABSTRACT_API_KEY</code>,{' '}
+                      <code className="text-[9px] bg-accent px-1 rounded">OPENAI_API_KEY</code>.
+                    </p>
                   </div>
                 )}
-                <div className="mt-3 p-2 rounded bg-background/60 border border-border">
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    <strong className="text-foreground">To fix:</strong>{' '}
-                    Set environment variables in{' '}
-                    <code className="text-[9px] bg-accent px-1 rounded">.env.local</code> (local) or{' '}
-                    <code className="text-[9px] bg-accent px-1 rounded">Netlify → Site Settings → Environment</code> (production).
-                    Keys needed: <code className="text-[9px] bg-accent px-1 rounded">NUMVERIFY_API_KEY</code>,{' '}
-                    <code className="text-[9px] bg-accent px-1 rounded">SERPER_API_KEY</code>,{' '}
-                    <code className="text-[9px] bg-accent px-1 rounded">ABSTRACT_API_KEY</code>,{' '}
-                    <code className="text-[9px] bg-accent px-1 rounded">OPENAI_API_KEY</code>.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -310,31 +306,21 @@ export default function InvestigationWorkspace() {
         {/* Results */}
         {isCompleted && currentInvestigation && (
           <div className="space-y-4">
-            {/* Config Error Banner */}
-            {currentInvestigation.timeline.some(t => t.eventType === 'error' && t.metadata?.isConfigError) && (
+            {/* Demo Mode Result Banner */}
+            {currentInvestigation.isDemoData && (
               <div className="p-4 rounded bg-[#c8a24e]/6 border border-[#c8a24e]/20">
                 <div className="flex items-start gap-2">
                   <div className="w-5 h-5 rounded-full bg-[#c8a24e]/10 border border-[#c8a24e]/15 flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-[#c8a24e] text-xs font-bold">!</span>
+                    <Zap className="w-2.5 h-2.5 text-[#c8a24e]" />
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-[#c8a24e]">API Keys Not Configured</p>
+                    <p className="text-xs font-medium text-[#c8a24e]">Demo Results — Simulated Data</p>
                     <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      Some API providers returned configuration errors. The investigation completed with limited data.
+                      This investigation was run in <strong>demo mode</strong> because one or more API keys are not configured. All evidence, identities, and AI assessment shown below are <strong>simulated for demonstration purposes</strong> and do not represent real intelligence data.
                     </p>
                     <p className="text-[10px] text-muted-foreground/70 mt-1.5">
-                      To fix: Go to <strong>Netlify → Site Settings → Environment variables</strong> and add the missing keys. For local dev, add them to <code className="text-[10px] bg-accent px-1 rounded">.env.local</code>.
+                      To run real investigations, add API keys to <code className="text-[10px] bg-accent px-1 rounded">.env.local</code> and restart.
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {currentInvestigation.timeline
-                        .filter(t => t.eventType === 'error' && t.metadata?.isConfigError)
-                        .flatMap(t => t.metadata?.warnings || [])
-                        .map((w: any, i: number) => (
-                          <span key={i} className="text-[9px] mono-label px-1.5 py-0.5 rounded bg-[#c8a24e]/8 text-[#c8a24e]/70">
-                            {w.stage}: {w.message}
-                          </span>
-                        ))}
-                    </div>
                   </div>
                 </div>
               </div>

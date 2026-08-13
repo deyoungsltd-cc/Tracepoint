@@ -36,6 +36,7 @@ export async function GET() {
         tablesExist: false,
         error: 'Database tables not found',
         projectRef,
+        fix: 'run_schema',
         instructions: [
           '1. Go to your Supabase Dashboard → SQL Editor',
           '2. Paste the contents of supabase-schema.sql',
@@ -50,14 +51,13 @@ export async function GET() {
       return NextResponse.json({
         configured: true,
         tablesExist: false,
-        error: 'RLS policy error — infinite recursion detected. The table exists but the policies need fixing.',
+        error: 'RLS policy error — infinite recursion detected.',
         projectRef,
         fix: 'rls_policy',
         sqlUrl: `https://supabase.com/dashboard/project/${projectRef}/sql`,
         instructions: [
           '1. Go to Supabase Dashboard → SQL Editor',
-          '2. Run the fix-rls.sql script',
-          '3. Or run: DROP POLICY "Admins can view all profiles" ON public.profiles; CREATE POLICY "Public read access" ON public.profiles FOR SELECT USING (true);',
+          '2. Run: DROP POLICY "Admins can view all profiles" ON public.profiles; CREATE POLICY "Public read access" ON public.profiles FOR SELECT USING (true);',
         ],
       });
     }
@@ -67,18 +67,19 @@ export async function GET() {
       return NextResponse.json({
         configured: true,
         tablesExist: false,
-        error: `Invalid Supabase API key — the anon key in your environment variables doesn't match this project. Go to Supabase Dashboard > Settings > API and copy the correct anon (public) key.`,
+        error: 'Invalid Supabase API key — copy the correct anon key from Supabase Dashboard > Settings > API.',
         fix: 'invalid_key',
       });
     }
 
-    // Other errors (RLS, permissions, etc.)
+    // Other errors (RLS, permissions, etc.) — show as schema issue, not generic
     return NextResponse.json({
       configured: true,
       tablesExist: false,
       error: error.message,
+      fix: 'run_schema',
     });
   } catch (err: any) {
-    return NextResponse.json({ configured: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ configured: false, tablesExist: false, error: err.message });
   }
 }

@@ -1,10 +1,10 @@
 // ============================================================
 // TRACEPOINT — Server-side AbstractAPI Phone Intelligence Proxy
-// Free alternative to Twilio Lookup (100 calls/month free).
-// Uses the Phone Intelligence endpoint for richer data.
+// Returns mock data when API key is not configured (Demo Mode).
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { generateMockAbstractPhone } from '@/lib/api/mock-data';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,11 +17,14 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.ABSTRACT_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'AbstractAPI key not configured' },
-        { status: 500 }
-      );
+
+    // --- DEMO MODE: Return mock data when key not configured ---
+    if (!apiKey || !apiKey.trim()) {
+      console.log('[AbstractPhone] DEMO MODE — returning mock data');
+      const mockData = generateMockAbstractPhone(phone);
+      return NextResponse.json(mockData, {
+        headers: { 'X-Mock': 'true' },
+      });
     }
 
     // Phone Intelligence endpoint (richer than phone validation)

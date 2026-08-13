@@ -47,7 +47,7 @@ function MapFallback() {
   const markers = useGlobeStore((s) => s.markers);
   console.log('[MapFallback] Rendering 2D map fallback with', markers.length, 'markers');
   return (
-    <div style={{ position: 'absolute', inset: 0, minHeight: '250px' }}>
+    <div style={{ position: 'absolute', inset: 0, minHeight: '280px', width: '100%', height: '100%' }}>
       <MapLibreMap markers={markers} />
     </div>
   );
@@ -90,11 +90,13 @@ function MapContent({ viewMode, useFallbackMap, markers }: { viewMode: string; u
     <>
       {viewMode === 'globe' && (
         useFallbackMap ? (
-          <MapLibreMap markers={markers} />
+          <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minHeight: '280px' }}>
+            <MapLibreMap markers={markers} />
+          </div>
         ) : (
           <GlobeErrorBoundary>
             <Suspense fallback={
-              <div className="w-full h-full flex items-center justify-center data-grid-bg">
+              <div className="w-full h-full flex items-center justify-center data-grid-bg" style={{ minHeight: '280px' }}>
                 <div className="text-center">
                   <Globe2 className="w-5 h-5 text-[#c8a24e] mx-auto mb-2 animate-pulse" />
                   <div className="mono-label">Initializing globe...</div>
@@ -107,7 +109,9 @@ function MapContent({ viewMode, useFallbackMap, markers }: { viewMode: string; u
         )
       )}
       {viewMode === 'map2d' && (
-        <MapLibreMap markers={markers} />
+        <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', minHeight: '280px' }}>
+          <MapLibreMap markers={markers} />
+        </div>
       )}
       {viewMode === 'list' && (
         <div className="w-full h-full overflow-auto p-3">
@@ -253,7 +257,9 @@ function DashboardContent() {
         {dbNeedsSetup && (
           <div className="mt-1.5 p-1.5 rounded bg-[#c8a24e]/4 border border-[#c8a24e]/10">
             <p className="text-[9px] text-[#c8a24e]/80 mb-1">
-              {dbStatus?.fix === 'rls_policy' ? 'RLS policy error - click below to auto-fix' : 'Run schema in Supabase SQL Editor'}
+              {dbStatus?.fix === 'rls_policy' ? 'RLS policy error - click below to auto-fix'
+                : dbStatus?.fix === 'invalid_key' ? 'API key issue — check Supabase Dashboard > Settings > API'
+                : 'Tables not created yet - run schema in SQL Editor'}
             </p>
             {dbStatus?.fix === 'rls_policy' ? (
               <button
@@ -264,12 +270,13 @@ function DashboardContent() {
               >Auto-fix RLS Policies</button>
             ) : (
               <a
-                href={`https://supabase.com/dashboard/project/${dbStatus?.projectRef}/sql`}
+                href={`https://supabase.com/dashboard/project/${dbStatus?.projectRef || 'bcgdwkhkstxneovbybmh'}/sql`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[9px] text-[#c8a24e] underline hover:text-foreground transition-colors"
-              >Open SQL Editor</a>
+              >Open Supabase Dashboard</a>
             )}
+            <p className="text-[8px] text-muted-foreground/60 mt-1">App works fully without DB — for cloud sync only</p>
           </div>
         )}
       </div>

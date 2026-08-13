@@ -1,8 +1,10 @@
 // ============================================================
 // TRACEPOINT — Server-side NumVerify Phone Validation Proxy
+// Returns mock data when API key is not configured (Demo Mode).
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { generateMockNumVerify } from '@/lib/api/mock-data';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +12,15 @@ export async function GET(request: NextRequest) {
     if (!phone) return NextResponse.json({ error: 'phone required' }, { status: 400 });
 
     const apiKey = process.env.NUMVERIFY_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'NumVerify API key not configured' }, { status: 500 });
+
+    // --- DEMO MODE: Return mock data when key not configured ---
+    if (!apiKey || !apiKey.trim()) {
+      console.log('[NumVerify] DEMO MODE — returning mock data');
+      const mockData = generateMockNumVerify(phone);
+      return NextResponse.json(mockData, {
+        headers: { 'X-Mock': 'true' },
+      });
+    }
 
     const params = new URLSearchParams({ access_key: apiKey, number: phone });
     const response = await fetch(`https://apilayer.net/api/validate?${params.toString()}`);

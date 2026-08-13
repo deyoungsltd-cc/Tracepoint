@@ -390,11 +390,13 @@ function GlobeSceneInner() {
   return (
     <Canvas
       camera={{ position: [0, 1.5, 5], fov: 45, near: 0.1, far: 1000 }}
-      dpr={[1, 1.5]}
+      dpr={[1, 2]}
       gl={{
         antialias: true,
         alpha: true,
         powerPreference: 'high-performance',
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.2,
       }}
       style={{
         position: 'absolute',
@@ -413,12 +415,14 @@ function GlobeSceneInner() {
       <Stars
         radius={100}
         depth={80}
-        count={3000}
+        count={4000}
         factor={4}
         saturation={0}
         fade
-        speed={0.5}
+        speed={0.3}
       />
+      {/* Ambient point light for depth */}
+      <pointLight position={[0, 0, 4]} intensity={0.15} color="#1a3a5a" />
 
       {/* Earth globe with wireframe overlay */}
       <Earth />

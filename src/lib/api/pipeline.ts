@@ -61,6 +61,12 @@ function uuid(): string {
 // Module-level warning collector — populated during pipeline execution
 const pipelineWarnings: Array<{ stage: string; message: string; severity: 'config' | 'error' | 'warn' }> = [];
 
+// Track which stages used demo/mock data
+const pipelineDemoFlags: Record<string, boolean> = {};
+
+export function getPipelineDemoFlags() { return { ...pipelineDemoFlags }; }
+export function clearPipelineDemoFlags() { for (const k of Object.keys(pipelineDemoFlags)) delete pipelineDemoFlags[k]; }
+
 export function getPipelineWarnings() { return [...pipelineWarnings]; }
 export function clearPipelineWarnings() { pipelineWarnings.length = 0; }
 
@@ -77,7 +83,9 @@ async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | 
       return null;
     }
     const data = await res.json();
-    console.log(`[Pipeline:Stage1] NumVerify OK (${ms}ms), valid=${data.valid}`);
+    const isMock = res.headers.get('X-Mock') === 'true';
+    if (isMock) pipelineDemoFlags.numverify = true;
+    console.log(`[Pipeline:Stage1] NumVerify OK (${ms}ms), valid=${data.valid}${isMock ? ' [DEMO]' : ''}`);
     return data;
   } catch (err) {
     const errMsg = `NumVerify fetch failed: ${err}`;
@@ -105,12 +113,14 @@ async function proxySerperSearch(query: string): Promise<Array<{ title: string; 
       return [];
     }
     const data = await res.json();
+    const isMock = res.headers.get('X-Mock') === 'true';
+    if (isMock) pipelineDemoFlags.serper = true;
     const results = (data.organic || []).map((item: Record<string, unknown>) => ({
       title: String(item.title || ''),
       link: String(item.link || ''),
       snippet: String(item.snippet || ''),
     }));
-    console.log(`[Pipeline:Stage3] Serper OK (${ms}ms), ${results.length} results for: ${query.substring(0, 60)}`);
+    console.log(`[Pipeline:Stage3] Serper OK (${ms}ms), ${results.length} results for: ${query.substring(0, 60)}${isMock ? ' [DEMO]' : ''}`);
     return results;
   } catch (err) {
     const errMsg = `Serper fetch failed: ${err}`;
@@ -227,6 +237,8 @@ async function stagePhoneEnrichment(
     () => lookupAbstractPhone(config.phoneNormalized!),
     30 * 60 * 1000
   );
+  // If abstract returned data but numverify is demo, assume abstract is also demo
+  if (abstractResult && pipelineDemoFlags.numverify) pipelineDemoFlags.abstractphone = true;
 
   if (abstractResult && abstractResult.valid) {
     const provider = 'AbstractAPI';
@@ -1189,6 +1201,7 @@ export async function runRealInvestigation(
   const allTimeline: TimelineEvent[] = [];
   let country = config.country || '';
   clearPipelineWarnings();
+  clearPipelineDemoFlags();
   console.log(`[Pipeline] === START investigation === phone=${config.phone}, email=${config.email}, depth=${config.depth}`);
 
   callbacks.onProgress('initializing', 'Initializing investigation...', 3);
@@ -1325,7 +1338,7 @@ export async function runRealInvestigation(
     confidence: overallConfidence,
     hasConflicts: allEvidence.some(e => e.verificationStatus === 'conflicting'),
     locationStatus: enrichedLocations.length > 0 ? 'located' : 'unavailable',
-    isDemoData: false,
+    isDemoData: Object.keys(getPipelineDemoFlags()).length > 0,
     startedAt: now,
     completedAt: timestampNow(),
     createdAt: now,
@@ -1367,8 +1380,25 @@ export async function runRealInvestigation(
   }
 
   // --- Final summary ---
+  const demoStages = Object.keys(getPipelineDemoFlags());
   const configWarnings = pipelineWarnings.filter(w => w.severity === 'config');
-  if (configWarnings.length > 0) {
+
+  if (demoStages.length > 0) {
+    // Demo mode — no config errors, just informational notice
+    const demoMsg = `Demo mode: ${demoStages.length} provider(s) used simulated data (${demoStages.join(', ')}). Results are illustrative only.`;
+    allTimeline.push({
+      id: uuid(),
+      eventType: 'demo_mode',
+      description: demoMsg,
+      metadata: { isDemo: true, demoStages },
+      timestamp: timestampNow(),
+    });
+    // Also mark the AI as demo if AI assessment was generated
+    if (aiAssessment) pipelineDemoFlags.openai = true;
+    // Update the isDemoData flag
+    baseInvestigation.isDemoData = Object.keys(getPipelineDemoFlags()).length > 0;
+    callbacks.onProgress('completed', 'Investigation complete (demo data).', 100);
+  } else if (configWarnings.length > 0) {
     const configMsg = `API CONFIGURATION REQUIRED: ${configWarnings.map(w => w.stage).join(', ')} key(s) not set. Set environment variables in Netlify → Site Settings → Environment or in .env.local for local dev.`;
     allTimeline.push({
       id: uuid(),
