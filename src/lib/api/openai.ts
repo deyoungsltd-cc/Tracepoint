@@ -22,7 +22,8 @@ async function callAI(
   model?: string
 ): Promise<string | null> {
   try {
-    const res = await fetch('/api/ai', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/ai`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, model }),

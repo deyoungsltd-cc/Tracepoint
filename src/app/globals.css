@@ -203,6 +203,14 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+@keyframes pulse-dot-green {
+  0%, 100% { box-shadow: 0 0 6px rgba(74,158,90,0.5), 0 0 12px rgba(74,158,90,0.15); }
+  50% { box-shadow: 0 0 10px rgba(74,158,90,0.7), 0 0 20px rgba(74,158,90,0.25); }
+}
+@keyframes pulse-dot-gold {
+  0%, 100% { box-shadow: 0 0 6px rgba(200,162,78,0.5), 0 0 12px rgba(200,162,78,0.15); }
+  50% { box-shadow: 0 0 10px rgba(200,162,78,0.7), 0 0 20px rgba(200,162,78,0.25); }
+}
 .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
 /* Source type badge */
@@ -219,35 +227,56 @@
   border: 1px solid #23282360;
 }
 
-/* Progress bar */
+/* Progress bar — subtle glow */
 .progress-track {
   background: #1a1e1b;
   height: 2px;
   border-radius: 1px;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #c8a24e, #d4b565);
+  background: linear-gradient(90deg, #c8a24e, #d4b565, #c8a24e);
+  background-size: 200% 100%;
   border-radius: 1px;
   transition: width 0.4s ease;
-  box-shadow: 0 0 6px #c8a24e40;
+  box-shadow: 0 0 8px #c8a24e55, 0 0 16px #c8a24e22;
+  animation: progress-shimmer 2s linear infinite;
 }
 
-/* Surface panel — elevated card with subtle depth */
+@keyframes progress-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Surface panel — elevated card with subtle depth and glass effect */
 .surface {
-  background: #151917;
-  border: 1px solid #232823;
+  background: linear-gradient(135deg, rgba(21,25,23,0.95), rgba(18,21,19,0.98));
+  border: 1px solid rgba(35,40,35,0.8);
   border-radius: var(--radius);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.02);
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.2),
+    0 4px 12px rgba(0,0,0,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    inset 0 0 0 1px rgba(255,255,255,0.01);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Globe container — enhanced depth with vignette */
+.surface:hover {
+  border-color: rgba(200,162,78,0.08);
+}
+
+/* Globe container — enhanced depth with multi-layered vignette and glow */
 .globe-bg {
   background:
-    radial-gradient(ellipse at 30% 30%, rgba(26, 58, 74, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 70%, rgba(200, 162, 78, 0.04) 0%, transparent 40%),
-    radial-gradient(ellipse at 40% 45%, #141a16 0%, #0c0e0d 70%);
+    radial-gradient(ellipse at 25% 20%, rgba(200,162,78,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 75% 80%, rgba(74,158,90,0.02) 0%, transparent 40%),
+    radial-gradient(ellipse at 30% 30%, rgba(26, 58, 74, 0.18) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 70%, rgba(200, 162, 78, 0.05) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 50%, #141a16 0%, #0a0c0b 100%);
+  box-shadow: inset 0 0 80px rgba(0,0,0,0.3), inset 0 0 20px rgba(0,0,0,0.2);
 }
 
 /* Admin panel — separate visual language */
@@ -308,24 +337,26 @@
   border-radius: var(--radius) var(--radius) 0 0;
 }
 
-/* Intelligence badge — primary action indicator */
+/* Intelligence badge — primary action indicator with subtle glow */
 .intel-badge {
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.5rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 2px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-shadow: 0 0 6px currentColor;
 }
 
-/* Status indicator with glow */
+/* Status indicator with glow and pulse */
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
+  transition: box-shadow 0.3s ease;
 }
-.status-dot.healthy { background: #4a9e5a; box-shadow: 0 0 6px rgba(74,158,90,0.4); }
-.status-dot.degraded { background: #c8a24e; box-shadow: 0 0 6px rgba(200,162,78,0.4); }
-.status-dot.down { background: #b83a3a; box-shadow: 0 0 6px rgba(184,58,58,0.4); }
+.status-dot.healthy { background: #4a9e5a; box-shadow: 0 0 6px rgba(74,158,90,0.5), 0 0 12px rgba(74,158,90,0.15); animation: pulse-dot-green 3s ease-in-out infinite; }
+.status-dot.degraded { background: #c8a24e; box-shadow: 0 0 6px rgba(200,162,78,0.5), 0 0 12px rgba(200,162,78,0.15); animation: pulse-dot-gold 4s ease-in-out infinite; }
+.status-dot.down { background: #b83a3a; box-shadow: 0 0 6px rgba(184,58,58,0.5), 0 0 12px rgba(184,58,58,0.15); }

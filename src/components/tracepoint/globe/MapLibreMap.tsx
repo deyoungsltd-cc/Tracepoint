@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { GlobeMarker } from '@/lib/types';
 import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+// CSS is loaded via <link> in layout.tsx for reliable production loading
 
 interface MapLibreMapProps {
   markers: GlobeMarker[];
@@ -70,16 +70,13 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
       });
 
       map.on('load', () => {
-        // Force recalculation after tiles load
         setTimeout(() => { try { map.resize(); } catch {} }, 200);
         console.log('[MapLibre] Map loaded successfully');
       });
 
-      // Handle resize events
       const handleResize = () => { try { map.resize(); } catch {} };
       window.addEventListener('resize', handleResize);
 
-      // ResizeObserver for container dimension changes (critical for mobile)
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
@@ -110,18 +107,16 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
     }
   }, []);
 
-  // Initialize map with retry logic
   useEffect(() => {
-    // Try immediately
     const immediateResult = initMap();
 
-    // If container too small, retry with delays (handles mobile layout timing)
     if (!immediateResult) {
       const timers = [
         setTimeout(initMap, 100),
         setTimeout(initMap, 300),
         setTimeout(initMap, 600),
         setTimeout(initMap, 1000),
+        setTimeout(initMap, 2000),
       ];
       return () => timers.forEach(clearTimeout);
     }
@@ -134,12 +129,10 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
     };
   }, [initMap]);
 
-  // Update markers when they change
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Clear all markers from previous render
     if ((map as any)._tpMarkers) {
       (map as any)._tpMarkers.forEach((m: any) => m.remove());
     }
@@ -156,22 +149,25 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
       const color = MARKER_COLORS[marker.type] || MARKER_COLORS.default;
 
       el.style.cssText = `
-        width: 10px; height: 10px; border-radius: 50%;
+        width: 12px; height: 12px; border-radius: 50%;
         background: ${color};
-        box-shadow: 0 0 8px ${color}66, 0 0 20px ${color}22;
-        border: 1.5px solid ${color}aa;
+        box-shadow: 0 0 10px ${color}88, 0 0 24px ${color}33;
+        border: 2px solid ${color}cc;
         cursor: pointer;
+        transition: transform 0.15s ease;
       `;
+      el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.4)'; });
+      el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
 
       const popup = new maplibregl.Popup({
-        offset: 12,
+        offset: 14,
         closeButton: false,
         className: 'tp-maplibre-popup',
       }).setHTML(
         `<div style="font-family:var(--font-geist-mono),monospace;font-size:11px;color:#d4d4cc;">
-          <div style="font-weight:600;margin-bottom:2px;">${marker.label || 'Unknown'}</div>
+          <div style="font-weight:600;margin-bottom:3px;">${marker.label || 'Unknown'}</div>
           <div style="color:#707870;font-size:10px;">${marker.lat.toFixed(4)}, ${marker.lng.toFixed(4)}</div>
-          ${marker.confidence ? `<div style="color:${color};font-size:10px;margin-top:3px;">${marker.confidence}% confidence</div>` : ''}
+          ${marker.confidence ? `<div style="color:${color};font-size:10px;margin-top:4px;">${marker.confidence}% confidence</div>` : ''}
         </div>`
       );
 
@@ -199,9 +195,9 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         .tp-maplibre-popup .maplibregl-popup-content {
           background: #151917;
           border: 1px solid #232823;
-          border-radius: 3px;
-          padding: 8px 10px;
-          box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+          border-radius: 4px;
+          padding: 10px 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 0 1px rgba(200,162,78,0.15);
         }
         .tp-maplibre-popup .maplibregl-popup-tip {
           border-top-color: #151917;
@@ -209,10 +205,11 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
         .tp-maplibre-popup .maplibregl-popup-close-button {
           display: none;
         }
-        .maplibregl-ctrl-attrib { font-size: 8px !important; background: rgba(12,14,13,0.85) !important; color: #5e665c !important; }
+        .maplibregl-ctrl-attrib { font-size: 8px !important; background: rgba(12,14,13,0.9) !important; color: #5e665c !important; backdrop-filter: blur(4px); border-radius: 3px !important; }
         .maplibregl-ctrl-attrib a { color: #5e665c !important; }
-        .maplibregl-ctrl-group { background: #151917 !important; border: 1px solid #232823 !important; border-radius: 3px !important; }
+        .maplibregl-ctrl-group { background: rgba(21,25,23,0.95) !important; border: 1px solid #232823 !important; border-radius: 4px !important; box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important; backdrop-filter: blur(4px); }
         .maplibregl-ctrl-group button { border-color: #232823 !important; }
+        .maplibregl-ctrl-group button:hover { background-color: #1f2420 !important; }
         .maplibregl-ctrl-group button span { background: #cdd1c8 !important; }
         .tp-maplibre-container {
           position: relative;
@@ -229,10 +226,10 @@ export default function MapLibreMap({ markers, className = '' }: MapLibreMapProp
           min-height: 280px !important;
         }
         .tp-maplibre-container .maplibregl-map canvas {
-          filter: brightness(0.7) contrast(1.1) saturate(0.8) hue-rotate(180deg) invert(1);
+          filter: brightness(0.65) contrast(1.15) saturate(0.75) hue-rotate(180deg) invert(1);
         }
       `}</style>
-      <div className={className || ''} style={{ position: 'absolute', inset: 0, minHeight: '280px' }}>
+      <div className={className || ''} style={{ position: 'absolute', inset: 0, minHeight: '280px', width: '100%', height: '100%' }}>
         <div className="tp-maplibre-container">
           <div ref={mapContainer} style={{ width: '100%', height: '100%', minHeight: '280px' }} />
         </div>

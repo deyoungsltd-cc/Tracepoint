@@ -32,7 +32,7 @@ export async function validatePhone(
     });
 
     const response = await fetch(
-      `http://apilayer.net/api/validate?${params.toString()}`,
+      `https://apilayer.net/api/validate?${params.toString()}`,
       {
         method: 'GET',
         headers: { Accept: 'application/json' },

@@ -178,7 +178,8 @@ function normalizeAbstractResponse(raw: AbstractApiRawResponse): AbstractPhoneRe
  */
 export async function lookupAbstractPhone(phone: string): Promise<AbstractPhoneResult | null> {
   try {
-    const res = await fetch('/api/abstractphone', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/abstractphone`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone }),

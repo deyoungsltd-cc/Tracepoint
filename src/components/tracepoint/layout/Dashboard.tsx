@@ -199,8 +199,8 @@ function DashboardContent() {
     ? Math.round(completed.reduce((s, i) => s + (i.confidence || 0), 0) / completed.length)
     : null;
 
-  const dbConnected = isSupabaseConfigured() && dbStatus?.tablesExist !== false;
-  const dbNeedsSetup = isSupabaseConfigured() && dbStatus?.tablesExist === false;
+  const dbConnected = isSupabaseConfigured() && dbStatus?.tablesExist === true;
+  const dbNeedsSetup = isSupabaseConfigured() && (dbStatus?.tablesExist === false || dbStatus?.fix === 'rls_policy');
   const healthyProviders = providers.filter(p => p.health === 'healthy' && p.isEnabled).length;
 
   const leftPanelContent = (
@@ -247,7 +247,7 @@ function DashboardContent() {
             <Database className="w-3 h-3" /> Database
           </span>
           {dbNeedsSetup ? (
-            <span className="intel-badge text-[#c8a24e] bg-[#c8a24e]/8 border border-[#c8a24e]/15">NEEDS SETUP</span>
+            <span className="intel-badge text-[#c8a24e] bg-[#c8a24e]/8 border border-[#c8a24e]/15">RLS FIX</span>
           ) : dbConnected ? (
             <span className="intel-badge text-[#4a9e5a] bg-[#4a9e5a]/8 border border-[#4a9e5a]/15">CONNECTED</span>
           ) : (

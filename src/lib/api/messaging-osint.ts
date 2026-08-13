@@ -24,7 +24,8 @@ export async function checkWhatsApp(phone: string): Promise<MessagingCheckResult
   
   try {
     // Search for public WhatsApp references
-    const res = await fetch('/api/serper', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/serper`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: `"${cleanPhone}" whatsapp OR wa.me`, num: 5 }),
@@ -70,7 +71,8 @@ export async function checkTelegram(phone: string): Promise<MessagingCheckResult
   const cleanPhone = phone.replace(/[^0-9+]/g, '');
   
   try {
-    const res = await fetch('/api/serper', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/serper`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: `"${cleanPhone}" telegram OR t.me`, num: 5 }),
@@ -119,7 +121,8 @@ export async function checkSignal(phone: string): Promise<MessagingCheckResult> 
   const cleanPhone = phone.replace(/[^0-9+]/g, '');
   
   try {
-    const res = await fetch('/api/serper', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/serper`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: `"${cleanPhone}" signal messenger`, num: 5 }),

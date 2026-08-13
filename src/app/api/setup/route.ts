@@ -72,6 +72,24 @@ export async function GET() {
       });
     }
 
+    // Row-level security policy error — table exists but anon can't read
+    if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy') || error.message?.includes('permission denied')) {
+      const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || '';
+      return NextResponse.json({
+        configured: true,
+        tablesExist: true,
+        error: 'RLS policy blocks anonymous reads. Tables exist but policies need updating.',
+        projectRef,
+        fix: 'rls_policy',
+        sqlUrl: `https://supabase.com/dashboard/project/${projectRef}/sql`,
+        instructions: [
+          'Run in SQL Editor:',
+          'CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);',
+          'CREATE POLICY "Public read investigations" ON public.investigations FOR SELECT USING (true);',
+        ],
+      });
+    }
+
     // Other errors (RLS, permissions, etc.) — show as schema issue, not generic
     return NextResponse.json({
       configured: true,

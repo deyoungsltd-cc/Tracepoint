@@ -73,7 +73,8 @@ export function clearPipelineWarnings() { pipelineWarnings.length = 0; }
 async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | null> {
   try {
     const t0 = Date.now();
-    const res = await fetch(`/api/numverify?phone=${encodeURIComponent(phone)}`);
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/numverify?phone=${encodeURIComponent(phone)}`);
     const ms = Date.now() - t0;
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -99,7 +100,8 @@ async function proxyNumVerify(phone: string): Promise<Record<string, unknown> | 
 async function proxySerperSearch(query: string): Promise<Array<{ title: string; link: string; snippet: string }>> {
   try {
     const t0 = Date.now();
-    const res = await fetch('/api/serper', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/serper`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),

@@ -21,7 +21,8 @@ export async function lookupTwilio(
   if (!phone) return null;
 
   try {
-    const response = await fetch('/api/twilio', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const response = await fetch(`${origin}/api/twilio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone }),

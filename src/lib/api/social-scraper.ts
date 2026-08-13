@@ -31,7 +31,8 @@ export async function scrapeSocialProfile(url: string): Promise<ScrapedProfile |
     if (!platform) return null;
 
     // Use Serper to get structured data about this specific URL
-    const res = await fetch('/api/serper', {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const res = await fetch(`${origin}/api/serper`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: `site:${url}`, num: 1 }),
